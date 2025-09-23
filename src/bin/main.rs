@@ -42,6 +42,16 @@ enum Commands {
         #[arg(long, help = "Ending block height (default: 0)")]
         end_height: Option<u32>,
     },
+    Export {
+        #[arg(long, default_value = "~/.bitcoin", help = "Path to Bitcoin data directory (parent of blocks/ folder)")]
+        datadir: PathBuf,
+        #[arg(help = "Output Arrow file path")]
+        filename: PathBuf,
+        #[arg(help = "Column names to export (e.g., height tx_count fee_avg)")]
+        columns: Vec<String>,
+        #[arg(long, help = "Maximum block height to export (default: tip)")]
+        max_height: Option<u32>,
+    },
 }
 
 fn expand_tilde(path: &PathBuf) -> PathBuf {
@@ -68,6 +78,11 @@ fn main() -> anyhow::Result<()> {
             let expanded_datadir = expand_tilde(&datadir);
             println!("Iterating blocks from {:?} to {:?}", start_height, end_height);
             iterate_blocks(expanded_datadir, start_height, end_height)?;
+        }
+        Commands::Export { datadir, filename, columns, max_height } => {
+            let expanded_datadir = expand_tilde(&datadir);
+            println!("Exporting columns {:?} to {}", columns, filename.display());
+            export_arrow_file(expanded_datadir, filename, columns, max_height)?;
         }
     }
 
@@ -210,8 +225,9 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
         None => return Err(anyhow::anyhow!("Genesis block not found - no block with prev_hash = all zeros")),
     };
 
-    // Iterative function to calculate and cache block heights. It's called
-    // once for each block for which we have a hash
+    // Calculate and cache block heights using a two-phase approach:
+    // 1. Build stack of hashes backwards until we find a known height or orphan
+    // 2. Unwind stack forwards, setting heights incrementally
     fn get_block_height(
         start_hash: &BlockHash,
         blocks_map: &mut HashMap<BlockHash, (u64, String, BlockHash, BlockHeight)>
@@ -224,54 +240,60 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
             }
         }
 
-        // Build the chain path using an explicit stack
-        let mut path = Vec::new();
+        // Phase 1: Build stack backwards until we find a block with known status
+        let mut stack = Vec::new();
         let mut current_hash = *start_hash;
 
-        // Traverse backwards to find a block with known height
         loop {
-            if let Some((_, _, _, height)) = blocks_map.get(&current_hash) {
-                match height {
-                    BlockHeight::Known(_) => {
-                        // Found a block with known height, start calculating from here
-                        break;
-                    }
-                    BlockHeight::Orphaned => {
-                        // Parent is orphaned, so this chain is also orphaned
-                        for &hash in &path {
-                            blocks_map.get_mut(&hash).unwrap().3 = BlockHeight::Orphaned;
+            // Add current hash to stack
+            stack.push(current_hash);
+
+            // Check if current block exists and get its info
+            let (_, _, prev_hash, height) = match blocks_map.get(&current_hash) {
+                Some(info) => info.clone(),
+                None => {
+                    // Block not found - entire chain is orphaned
+                    for &hash in &stack {
+                        if let Some(entry) = blocks_map.get_mut(&hash) {
+                            entry.3 = BlockHeight::Orphaned;
                         }
-                        return Ok(BlockHeight::Orphaned);
                     }
-                    BlockHeight::NotYetKnown => {} // Continue traversing
+                    return Ok(BlockHeight::Orphaned);
                 }
-            } else {
-                // Block not found - this chain is orphaned
-                for &hash in &path {
-                    blocks_map.get_mut(&hash).unwrap().3 = BlockHeight::Orphaned;
+            };
+
+            // Check if we've reached a block with known status
+            match height {
+                BlockHeight::Known(_) => {
+                    // Found a block with known height - we can start calculating from here
+                    break;
                 }
-                blocks_map.get_mut(start_hash).unwrap().3 = BlockHeight::Orphaned;
-                return Ok(BlockHeight::Orphaned);
+                BlockHeight::Orphaned => {
+                    // Found an orphaned block - entire chain is orphaned
+                    for &hash in &stack {
+                        blocks_map.get_mut(&hash).unwrap().3 = BlockHeight::Orphaned;
+                    }
+                    return Ok(BlockHeight::Orphaned);
+                }
+                BlockHeight::NotYetKnown => {
+                    // Continue traversing backwards
+                    current_hash = prev_hash;
+                }
             }
-
-            // Get the block info
-            let (_, _, prev_hash, _) = blocks_map.get(&current_hash)
-                .ok_or_else(|| anyhow::anyhow!("Block hash not found: {}", current_hash))?
-                .clone();
-
-            path.push(current_hash);
-            current_hash = prev_hash;
         }
 
-        // Now calculate heights going forward from the known parent
-        let current_height = match blocks_map.get(&current_hash).unwrap().3 {
+        // Phase 2: Unwind stack, setting heights incrementally
+        let base_height = match blocks_map.get(&current_hash).unwrap().3 {
             BlockHeight::Known(h) => h,
-            _ => return Err(anyhow::anyhow!("Unexpected state")),
+            _ => return Err(anyhow::anyhow!("Expected known height but found something else")),
         };
 
-        // Process the path in reverse order (from parent to child)
-        let mut height = current_height;
-        for &hash in path.iter().rev() {
+        // Remove the base block from stack since it already has a known height
+        stack.pop();
+
+        // Process stack in reverse order (from oldest to newest block)
+        let mut height = base_height;
+        for &hash in stack.iter().rev() {
             height += 1;
             blocks_map.get_mut(&hash).unwrap().3 = BlockHeight::Known(height);
         }
@@ -413,6 +435,115 @@ fn iterate_blocks(datadir: PathBuf, start_height: Option<u32>, end_height: Optio
     }
 
     println!("Completed iteration. Processed {} blocks.", processed_count);
+    Ok(())
+}
+
+// Column extraction functions
+type ColumnExtractor = fn(&bitcoin::Block, u32) -> f64;
+
+fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
+    match column_name {
+        "height" => Ok(|_block, height| height as f64),
+        "timestamp" => Ok(|block, _height| block.header.time as f64),
+        "tx_count" => Ok(|block, _height| block.txdata.len() as f64),
+        "fee_avg" => Ok(|block, height| {
+            let fees = calculate_block_fees(&block.txdata, height);
+            let tx_count = block.txdata.len().saturating_sub(1); // Exclude coinbase
+            if tx_count > 0 {
+                fees.to_sat() as f64 / tx_count as f64
+            } else {
+                0.0
+            }
+        }),
+        "block_size" => Ok(|block, _height| {
+            bitcoin::consensus::serialize(block).len() as f64
+        }),
+        _ => Err(anyhow::anyhow!("Unknown column: {}", column_name)),
+    }
+}
+
+fn export_arrow_file(
+    datadir: PathBuf,
+    filename: PathBuf,
+    columns: Vec<String>,
+    max_height: Option<u32>,
+) -> anyhow::Result<()> {
+    use arrow::array::{Float64Builder, RecordBatch, RecordBatchWriter};
+    use arrow::datatypes::{DataType, Field, Schema};
+    use arrow_ipc::writer::FileWriter;
+    use std::fs::File;
+    use std::sync::Arc;
+
+    // Load the index
+    let block_index = BlockIndex::load_from_file(INDEX_PATH)?;
+    let xor_key = load_xor_key(&datadir)?;
+
+    // Determine height range
+    let tip_height = block_index.tip_height;
+    let export_max_height = max_height.unwrap_or(tip_height);
+    let export_min_height = 0u32;
+
+    println!("Exporting {} columns from height {} to {}",
+             columns.len(), export_min_height, export_max_height);
+
+    // Validate columns and get extractors
+    let mut extractors = Vec::new();
+    for column in &columns {
+        extractors.push(get_column_extractor(column)?);
+    }
+
+    // Create Arrow schema
+    let fields: Vec<Field> = columns.iter()
+        .map(|name| Field::new(name, DataType::Float64, false))
+        .collect();
+    let schema = Arc::new(Schema::new(fields));
+
+    // Create builders for each column
+    let mut builders: Vec<Float64Builder> = columns.iter()
+        .map(|_| Float64Builder::new())
+        .collect();
+
+    // Process blocks and collect data
+    let mut processed_count = 0;
+    for height in export_min_height..=export_max_height {
+        if let Some(location) = block_index.blocks.get(&height) {
+            let mut reader = BlockFileReader::new_with_xor_key(&location.file_path, xor_key)?;
+            reader.seek_to_offset(location.file_offset)?;
+
+            if let Some((block, _offset)) = reader.read_next_block()? {
+                // Extract values for each column
+                for (i, extractor) in extractors.iter().enumerate() {
+                    let value = extractor(&block, height);
+                    builders[i].append_value(value);
+                }
+
+                processed_count += 1;
+                if processed_count % 10000 == 0 {
+                    println!("Processed {} blocks...", processed_count);
+                }
+            } else {
+                return Err(anyhow::anyhow!("Could not read block at height {}", height));
+            }
+        } else {
+            return Err(anyhow::anyhow!("Block at height {} not found in index", height));
+        }
+    }
+
+    // Build Arrow arrays
+    let arrays: Vec<Arc<dyn arrow::array::Array>> = builders.into_iter()
+        .map(|mut builder| Arc::new(builder.finish()) as Arc<dyn arrow::array::Array>)
+        .collect();
+
+    // Create record batch
+    let batch = RecordBatch::try_new(schema.clone(), arrays)?;
+
+    // Write to Arrow file
+    let file = File::create(&filename)?;
+    let mut writer = FileWriter::try_new(file, &schema)?;
+    writer.write(&batch)?;
+    writer.close()?;
+
+    println!("Successfully exported {} rows to {}", processed_count, filename.display());
     Ok(())
 }
 
