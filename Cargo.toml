@@ -7,16 +7,8 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [[bin]]
-name = "block-iterator"
-path = "src/bin/block_iterator.rs"
-
-[[bin]]
-name = "simple-iterator"
-path = "src/bin/simple_iterator.rs"
-
-[[bin]]
-name = "chain-tip"
-path = "src/bin/chain_tip.rs"
+name = "main"
+path = "src/bin/main.rs"
 
 [dependencies]
 # WASM dependencies
@@ -33,9 +25,7 @@ serde-wasm-bindgen = "0.6"
 
 # CLI dependencies
 clap = { version = "4.4", features = ["derive"] }
-bitcoin = "0.31"
+bitcoin = { version = "0.31", features = ["serde"] }
 bitcoin_hashes = "0.13"
-leveldb = "0.8"
-rusty-leveldb = "4.0"
 anyhow = "1.0"
-hex = "0.4"
+bincode = "1.3"
