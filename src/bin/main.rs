@@ -31,11 +31,11 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     BuildIndex {
-        #[arg(long, help = "Path to Bitcoin data directory containing blk*.dat files")]
+        #[arg(long, default_value = "~/.bitcoin", help = "Path to Bitcoin data directory (parent of blocks/ folder)")]
         datadir: PathBuf,
     },
     Iterate {
-        #[arg(long, help = "Path to Bitcoin data directory containing blk*.dat files")]
+        #[arg(long, default_value = "~/.bitcoin", help = "Path to Bitcoin data directory (parent of blocks/ folder)")]
         datadir: PathBuf,
         #[arg(long, help = "Starting block height (default: tip)")]
         start_height: Option<u32>,
@@ -44,17 +44,30 @@ enum Commands {
     },
 }
 
+fn expand_tilde(path: &PathBuf) -> PathBuf {
+    if path.to_string_lossy().starts_with("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            let mut expanded = PathBuf::from(home);
+            expanded.push(path.strip_prefix("~/").unwrap_or(path));
+            return expanded;
+        }
+    }
+    path.clone()
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::BuildIndex { datadir } => {
-            println!("Building index from data directory: {}", datadir.display());
-            build_index(datadir)?;
+            let expanded_datadir = expand_tilde(&datadir);
+            println!("Building index from data directory: {}", expanded_datadir.display());
+            build_index(expanded_datadir)?;
         }
         Commands::Iterate { datadir, start_height, end_height } => {
+            let expanded_datadir = expand_tilde(&datadir);
             println!("Iterating blocks from {:?} to {:?}", start_height, end_height);
-            iterate_blocks(datadir, start_height, end_height)?;
+            iterate_blocks(expanded_datadir, start_height, end_height)?;
         }
     }
 
@@ -62,7 +75,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn load_xor_key(datadir: &PathBuf) -> anyhow::Result<[u8; 8]> {
-    let xor_path = datadir.join("xor.dat");
+    let xor_path = datadir.join("blocks").join("xor.dat");
     if xor_path.exists() {
         let mut xor_key = [0u8; 8];
         let mut file = std::fs::File::open(xor_path)?;
@@ -137,9 +150,10 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     // Load XOR key for deobfuscation
     let xor_key = load_xor_key(&datadir)?;
 
-    // Find all blk*.dat files
+    // Find all blk*.dat files in the blocks subdirectory
+    let blocks_dir = datadir.join("blocks");
     let mut blk_files = Vec::new();
-    for entry in std::fs::read_dir(&datadir)? {
+    for entry in std::fs::read_dir(&blocks_dir)? {
         let entry = entry?;
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
@@ -292,7 +306,6 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
             .collect();
 
         println!("Tip height: {}", max_height);
-        println!("Blocks at tip height: {}", tip_blocks.len());
 
         if tip_blocks.len() == 1 {
             let tip = tip_blocks[0];
