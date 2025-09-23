@@ -11,6 +11,7 @@ pub struct BlockLocation {
     pub file_path: String,
     pub file_offset: u64,
     pub block_hash: BlockHash,
+    pub block_size: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -182,7 +182,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     println!("Found {} block files", blk_files.len());
 
     // First pass: collect all blocks and their prev_hash relationships
-    let mut blocks_by_hash: HashMap<BlockHash, (u64, String, BlockHash, BlockHeight)> = HashMap::new(); // hash -> (offset, file_path, prev_hash, height)
+    let mut blocks_by_hash: HashMap<BlockHash, (u64, String, BlockHash, BlockHeight, u32)> = HashMap::new(); // hash -> (offset, file_path, prev_hash, height, block_size)
     let mut genesis_hash: Option<BlockHash> = None;
 
     for blk_file in &blk_files {
@@ -190,13 +190,13 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
         let mut reader = BlockFileReader::new_with_xor_key(blk_file, xor_key)?;
         let mut block_count = 0;
 
-        while let Some((header, offset)) = reader.read_next_header()? {
+        while let Some((header, offset, block_size)) = reader.read_next_header()? {
             let block_hash = header.block_hash();
             let prev_hash = header.prev_blockhash;
 
             blocks_by_hash.insert(
                 block_hash,
-                (offset, blk_file.to_string_lossy().to_string(), prev_hash, BlockHeight::NotYetKnown)
+                (offset, blk_file.to_string_lossy().to_string(), prev_hash, BlockHeight::NotYetKnown, block_size)
             );
 
             // Check if this is the genesis block (prev_hash is all zeros)
@@ -216,7 +216,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     // Verify genesis block was found and set its height to 0
     let _genesis = match genesis_hash {
         Some(hash) => {
-            if let Some((_, _, _, height)) = blocks_by_hash.get_mut(&hash) {
+            if let Some((_, _, _, height, _)) = blocks_by_hash.get_mut(&hash) {
                 *height = BlockHeight::Known(0);
                 println!("Set genesis block height to 0: {}", hash);
             }
@@ -230,10 +230,10 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     // 2. Unwind stack forwards, setting heights incrementally
     fn get_block_height(
         start_hash: &BlockHash,
-        blocks_map: &mut HashMap<BlockHash, (u64, String, BlockHash, BlockHeight)>
+        blocks_map: &mut HashMap<BlockHash, (u64, String, BlockHash, BlockHeight, u32)>
     ) -> anyhow::Result<BlockHeight> {
         // Check if height is already calculated
-        if let Some((_, _, _, height)) = blocks_map.get(start_hash) {
+        if let Some((_, _, _, height, _)) = blocks_map.get(start_hash) {
             match height {
                 BlockHeight::Known(_) | BlockHeight::Orphaned => return Ok(*height),
                 BlockHeight::NotYetKnown => {} // Continue to calculate
@@ -249,7 +249,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
             stack.push(current_hash);
 
             // Check if current block exists and get its info
-            let (_, _, prev_hash, height) = match blocks_map.get(&current_hash) {
+            let (_, _, prev_hash, height, _) = match blocks_map.get(&current_hash) {
                 Some(info) => info.clone(),
                 None => {
                     // Block not found - entire chain is orphaned
@@ -310,7 +310,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
 
     // Find the tip block (highest height)
     let tip_height = blocks_by_hash.values()
-        .filter_map(|(_, _, _, height)| match height {
+        .filter_map(|(_, _, _, height, _)| match height {
             BlockHeight::Known(h) => Some(*h),
             _ => None,
         })
@@ -319,7 +319,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     let tip_hash = if let Some(max_height) = tip_height {
         // Find all blocks at tip height
         let tip_blocks: Vec<BlockHash> = blocks_by_hash.iter()
-            .filter_map(|(hash, (_, _, _, height))| {
+            .filter_map(|(hash, (_, _, _, height, _))| {
                 match height {
                     BlockHeight::Known(h) if *h == max_height => Some(*hash),
                     _ => None,
@@ -356,11 +356,12 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
 
     // Build index by following the chain backwards from tip to genesis
     loop {
-        if let Some((offset, file_path, prev_hash, _)) = blocks_by_hash.get(&current_hash) {
+        if let Some((offset, file_path, prev_hash, _, block_size)) = blocks_by_hash.get(&current_hash) {
             let location = BlockLocation {
                 file_path: file_path.clone(),
                 file_offset: *offset,
                 block_hash: current_hash,
+                block_size: *block_size,
             };
 
             block_index.add_block(current_height, location);
@@ -455,8 +456,10 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
                 0.0
             }
         }),
-        "block_size" => Ok(|block, _height| {
-            bitcoin::consensus::serialize(block).len() as f64
+        "block_size" => Ok(|_block, _height| {
+            // Note: block_size is now cached in the index, this function won't be used for block_size
+            // This is kept for compatibility, but the export function uses cached values
+            0.0
         }),
         _ => Err(anyhow::anyhow!("Unknown column: {}", column_name)),
     }
@@ -512,8 +515,15 @@ fn export_arrow_file(
 
             if let Some((block, _offset)) = reader.read_next_block()? {
                 // Extract values for each column
-                for (i, extractor) in extractors.iter().enumerate() {
-                    let value = extractor(&block, height);
+                for (i, column) in columns.iter().enumerate() {
+                    let value = if column == "block_size" {
+                        // Use cached block size from index
+                        location.block_size as f64
+                    } else {
+                        // Use extractor function for other columns
+                        let extractor = &extractors[i];
+                        extractor(&block, height)
+                    };
                     builders[i].append_value(value);
                 }
 

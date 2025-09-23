@@ -68,7 +68,7 @@ impl BlockFileReader {
         Ok(Some((block, current_offset)))
     }
 
-    pub fn read_next_header(&mut self) -> Result<Option<(Header, u64)>> {
+    pub fn read_next_header(&mut self) -> Result<Option<(Header, u64, u32)>> {
         // Block file format: [4 bytes magic][4 bytes size][80 bytes header][variable transactions]
         let current_offset = self.reader.stream_position()?;
 
@@ -115,7 +115,7 @@ impl BlockFileReader {
         self.reader.seek(SeekFrom::Current(remaining_bytes as i64))?;
 
 
-        Ok(Some((header, current_offset)))
+        Ok(Some((header, current_offset, block_size as u32)))
     }
 
     pub fn seek_to_offset(&mut self, offset: u64) -> Result<()> {
