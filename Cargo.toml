@@ -1,0 +1,41 @@
+[package]
+name = "fee-explorer"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "block-iterator"
+path = "src/bin/block_iterator.rs"
+
+[[bin]]
+name = "simple-iterator"
+path = "src/bin/simple_iterator.rs"
+
+[[bin]]
+name = "chain-tip"
+path = "src/bin/chain_tip.rs"
+
+[dependencies]
+# WASM dependencies
+wasm-bindgen = "0.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+  "console",
+] }
+wasm-bindgen-futures = "0.4"
+getrandom = { version = "0.2", features = ["js"] }
+serde-wasm-bindgen = "0.6"
+
+# CLI dependencies
+clap = { version = "4.4", features = ["derive"] }
+bitcoin = "0.31"
+bitcoin_hashes = "0.13"
+leveldb = "0.8"
+rusty-leveldb = "4.0"
+anyhow = "1.0"
+hex = "0.4"

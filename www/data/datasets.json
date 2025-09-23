@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "block_range": {
+    "start": 700000,
+    "end": 800000
+  },
+  "datasets": [
+    {
+      "name": "Basic Stats",
+      "file": "basic_stats.arrow",
+      "columns": {
+        "height": {"type": "index", "description": "Block height"},
+        "timestamp": {"type": "index", "description": "Block timestamp"},
+        "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
+        "fee_avg": {"type": "metric", "unit": "sat/vB", "description": "Average fee rate"},
+        "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"}
+      }
+    },
+    {
+      "name": "Fee Analysis",
+      "file": "fee_analysis.arrow",
+      "columns": {
+        "height": {"type": "index", "description": "Block height"},
+        "fee_min": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
+        "fee_q25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee"},
+        "fee_median": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},
+        "fee_q75": {"type": "metric", "unit": "sat/vB", "description": "75th percentile fee"},
+        "fee_max": {"type": "metric", "unit": "sat/vB", "description": "Maximum fee rate"}
+      }
+    },
+    {
+      "name": "Transaction Analysis",
+      "file": "tx_analysis.arrow",
+      "columns": {
+        "height": {"type": "index", "description": "Block height"},
+        "sub_1sat_count": {"type": "metric", "unit": "transactions", "description": "Sub-1sat/vB transactions"},
+        "op_return_max_size": {"type": "metric", "unit": "bytes", "description": "Largest OP_RETURN size"},
+        "op_return_count": {"type": "metric", "unit": "transactions", "description": "Number of OP_RETURN transactions"}
+      }
+    },
+    {
+      "name": "Mining Data",
+      "file": "mining.arrow",
+      "columns": {
+        "height": {"type": "index", "description": "Block height"},
+        "miner": {"type": "filter", "description": "Mining pool name"},
+        "difficulty": {"type": "metric", "unit": "difficulty", "description": "Mining difficulty"},
+        "hash_rate": {"type": "metric", "unit": "EH/s", "description": "Estimated hash rate"}
+      }
+    }
+  ]
+}

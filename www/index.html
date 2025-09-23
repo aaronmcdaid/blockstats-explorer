@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bitcoin Block Fee Explorer</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bitcoin Block Fee Explorer</h1>
+            <p>Interactive visualization of per-block Bitcoin statistics with client-side analytics</p>
+        </header>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="metricSelect">Select Metrics:</label>
+                <select id="metricSelect" multiple size="8">
+                    <!-- Populated dynamically -->
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Block Range:</label>
+                <div class="range-inputs">
+                    <input type="number" id="startHeight" placeholder="Start height">
+                    <span>to</span>
+                    <input type="number" id="endHeight" placeholder="End height">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Chart Options:</label>
+                <div class="chart-options">
+                    <label><input type="checkbox" id="logScale"> Log Scale</label>
+                    <label><input type="checkbox" id="showMA"> Moving Average</label>
+                    <input type="number" id="maWindow" value="200" min="1" max="1000" placeholder="MA Window">
+                </div>
+            </div>
+
+            <div class="control-group">
+                <button id="updateChart" class="primary">Update Chart</button>
+                <button id="resetZoom">Reset Zoom</button>
+            </div>
+        </div>
+
+        <div class="status">
+            <span id="loadingStatus">Loading WASM module...</span>
+            <span id="dataStatus"></span>
+        </div>
+
+        <div class="chart-container">
+            <div id="mainChart"></div>
+        </div>
+
+        <footer>
+            <p>
+                Built with Rust + WebAssembly + Apache Arrow + Plotly.js<br>
+                Data processing happens entirely in your browser
+            </p>
+        </footer>
+    </div>
+
+    <script type="module" src="script.js"></script>
+</body>
+</html>
