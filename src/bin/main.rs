@@ -441,6 +441,47 @@ fn iterate_blocks(datadir: PathBuf, start_height: Option<u32>, end_height: Optio
 
 // Column extraction functions
 type ColumnExtractor = fn(&bitcoin::Block, u32) -> f64;
+type MultiColumnExtractor = fn(&bitcoin::Block, u32) -> Vec<f64>;
+
+#[derive(Debug, Clone)]
+enum ColumnSpec {
+    Single(String, ColumnExtractor),
+    Multi(String, Vec<f64>, MultiColumnExtractor), // base_name, quantiles, extractor
+}
+
+fn parse_column_spec(column_input: &str) -> anyhow::Result<ColumnSpec> {
+    // Check for quantile syntax: name[q1,q2,q3]
+    if let Some(bracket_start) = column_input.find('[') {
+        if !column_input.ends_with(']') {
+            return Err(anyhow::anyhow!("Invalid quantile syntax: missing closing ']' in '{}'", column_input));
+        }
+
+        let base_name = column_input[..bracket_start].to_string();
+        let quantiles_str = &column_input[bracket_start + 1..column_input.len() - 1];
+
+        // Parse quantiles
+        let quantiles: Result<Vec<f64>, _> = quantiles_str
+            .split(',')
+            .map(|s| s.trim().parse::<f64>())
+            .collect();
+
+        let quantiles = quantiles.map_err(|_| anyhow::anyhow!("Invalid quantile values in '{}'", column_input))?;
+
+        // Validate quantiles are in 0-100 range
+        for &q in &quantiles {
+            if q < 0.0 || q > 100.0 {
+                return Err(anyhow::anyhow!("Quantile {} out of range [0,100]", q));
+            }
+        }
+
+        let extractor = get_multi_column_extractor(&base_name)?;
+        Ok(ColumnSpec::Multi(base_name, quantiles, extractor))
+    } else {
+        // Regular single column
+        let extractor = get_column_extractor(column_input)?;
+        Ok(ColumnSpec::Single(column_input.to_string(), extractor))
+    }
+}
 
 fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
     match column_name {
@@ -465,6 +506,73 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
     }
 }
 
+fn get_multi_column_extractor(base_name: &str) -> anyhow::Result<MultiColumnExtractor> {
+    match base_name {
+        "fees" => Ok(|block, _height| {
+            // Calculate fee rate for each non-coinbase transaction
+            let mut fee_rates = Vec::new();
+
+            for (tx_idx, tx) in block.txdata.iter().enumerate() {
+                if tx_idx == 0 {
+                    continue; // Skip coinbase
+                }
+
+                // Calculate fee rate (simplified - assumes we can get input values)
+                // For now, use a placeholder since we'd need UTXO data for exact calculation
+                let tx_weight = tx.weight().to_wu() as f64;
+                let tx_vsize = tx_weight / 4.0;
+
+                // Estimate fee as output difference (placeholder)
+                // In real implementation, we'd need input values from UTXO set
+                let estimated_fee = 1000.0; // Placeholder sat
+
+                if tx_vsize > 0.0 {
+                    fee_rates.push(estimated_fee / tx_vsize);
+                }
+            }
+
+            fee_rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            fee_rates
+        }),
+        "tx_size" => Ok(|block, _height| {
+            // Transaction sizes in vbytes
+            let mut sizes: Vec<f64> = block.txdata.iter()
+                .skip(1) // Skip coinbase
+                .map(|tx| tx.weight().to_wu() as f64 / 4.0)
+                .collect();
+
+            sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sizes
+        }),
+        _ => Err(anyhow::anyhow!("Unknown multi-column: {}", base_name)),
+    }
+}
+
+fn calculate_quantiles(sorted_data: &[f64], quantiles: &[f64]) -> Vec<f64> {
+    if sorted_data.is_empty() {
+        return vec![0.0; quantiles.len()];
+    }
+
+    quantiles.iter().map(|&q| {
+        if q == 0.0 {
+            sorted_data[0]
+        } else if q == 100.0 {
+            sorted_data[sorted_data.len() - 1]
+        } else {
+            let pos = (q / 100.0) * (sorted_data.len() - 1) as f64;
+            let lower = pos.floor() as usize;
+            let upper = pos.ceil() as usize;
+
+            if lower == upper {
+                sorted_data[lower]
+            } else {
+                let weight = pos - lower as f64;
+                sorted_data[lower] * (1.0 - weight) + sorted_data[upper] * weight
+            }
+        }
+    }).collect()
+}
+
 fn export_arrow_file(
     datadir: PathBuf,
     filename: PathBuf,
@@ -486,23 +594,36 @@ fn export_arrow_file(
     let export_max_height = max_height.unwrap_or(tip_height);
     let export_min_height = 0u32;
 
-    println!("Exporting {} columns from height {} to {}",
-             columns.len(), export_min_height, export_max_height);
+    // Parse column specifications
+    let mut column_specs = Vec::new();
+    let mut expanded_column_names = Vec::new();
 
-    // Validate columns and get extractors
-    let mut extractors = Vec::new();
-    for column in &columns {
-        extractors.push(get_column_extractor(column)?);
+    for column_input in &columns {
+        let spec = parse_column_spec(column_input)?;
+        match &spec {
+            ColumnSpec::Single(name, _) => {
+                expanded_column_names.push(name.clone());
+            }
+            ColumnSpec::Multi(base_name, quantiles, _) => {
+                for &q in quantiles {
+                    expanded_column_names.push(format!("{}_{}", base_name, q as u32));
+                }
+            }
+        }
+        column_specs.push(spec);
     }
 
-    // Create Arrow schema
-    let fields: Vec<Field> = columns.iter()
+    println!("Exporting {} columns (expanded to {} columns) from height {} to {}",
+             columns.len(), expanded_column_names.len(), export_min_height, export_max_height);
+
+    // Create Arrow schema using expanded column names
+    let fields: Vec<Field> = expanded_column_names.iter()
         .map(|name| Field::new(name, DataType::Float64, false))
         .collect();
     let schema = Arc::new(Schema::new(fields));
 
-    // Create builders for each column
-    let mut builders: Vec<Float64Builder> = columns.iter()
+    // Create builders for each expanded column
+    let mut builders: Vec<Float64Builder> = expanded_column_names.iter()
         .map(|_| Float64Builder::new())
         .collect();
 
@@ -514,17 +635,34 @@ fn export_arrow_file(
             reader.seek_to_offset(location.file_offset)?;
 
             if let Some((block, _offset)) = reader.read_next_block()? {
-                // Extract values for each column
-                for (i, column) in columns.iter().enumerate() {
-                    let value = if column == "block_size" {
-                        // Use cached block size from index
-                        location.block_size as f64
-                    } else {
-                        // Use extractor function for other columns
-                        let extractor = &extractors[i];
-                        extractor(&block, height)
-                    };
-                    builders[i].append_value(value);
+                // Extract values for each column spec
+                let mut builder_idx = 0;
+
+                for spec in &column_specs {
+                    match spec {
+                        ColumnSpec::Single(name, extractor) => {
+                            let value = if name == "block_size" {
+                                // Use cached block size from index
+                                location.block_size as f64
+                            } else {
+                                // Use extractor function
+                                extractor(&block, height)
+                            };
+                            builders[builder_idx].append_value(value);
+                            builder_idx += 1;
+                        }
+                        ColumnSpec::Multi(_, quantiles, extractor) => {
+                            // Extract all values and calculate quantiles
+                            let data = extractor(&block, height);
+                            let quantile_values = calculate_quantiles(&data, quantiles);
+
+                            // Append each quantile value to its respective builder
+                            for value in quantile_values {
+                                builders[builder_idx].append_value(value);
+                                builder_idx += 1;
+                            }
+                        }
+                    }
                 }
 
                 processed_count += 1;
