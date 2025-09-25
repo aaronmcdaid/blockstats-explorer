@@ -45,15 +45,73 @@ class BitcoinFeeExplorer {
     }
 
     async loadDatasets() {
-        // For now, we'll create mock datasets since we don't have real Arrow files yet
-        // In production, this would load the actual Arrow files
-        await this.createMockDatasets();
+        // Load real Arrow files
+        await this.loadArrowDatasets();
     }
 
-    async createMockDatasets() {
-        // This is a placeholder - in production you'd load real Arrow files
-        // For now, we'll demonstrate the structure without actual data loading
-        this.updateDataStatus('Mock datasets loaded (no real data yet)');
+    async loadArrowDatasets() {
+        console.log('Loading real Arrow datasets...');
+
+        // Check if Arrow library is loaded
+        if (typeof Arrow === 'undefined') {
+            throw new Error('Apache Arrow library not loaded. Check if the CDN is accessible.');
+        }
+
+        console.log('Arrow library available:', typeof Arrow);
+        this.arrowData = new Map();
+
+        // Load each Arrow file from the metadata
+        for (const dataset of this.metadata.datasets) {
+            try {
+                console.log(`Loading ${dataset.file}...`);
+
+                const response = await fetch(`./data/${dataset.file}`);
+                console.log(`Response status for ${dataset.file}:`, response.status, response.statusText);
+
+                if (!response.ok) {
+                    throw new Error(`Failed to load ${dataset.file}: ${response.status} ${response.statusText}`);
+                }
+
+                const arrayBuffer = await response.arrayBuffer();
+                console.log(`${dataset.file} size:`, arrayBuffer.byteLength, 'bytes');
+
+                // Try different Arrow API methods depending on version
+                let table;
+                try {
+                    // Try the newer API first
+                    table = Arrow.tableFromIPC(arrayBuffer);
+                } catch (e1) {
+                    try {
+                        // Try alternative API
+                        table = Arrow.Table.from([Arrow.RecordBatch.from(arrayBuffer)]);
+                    } catch (e2) {
+                        try {
+                            // Try reading as IPC file
+                            const reader = Arrow.RecordBatchFileReader.from(arrayBuffer);
+                            table = new Arrow.Table(reader.readAll());
+                        } catch (e3) {
+                            console.log('Arrow API attempts failed:', {e1: e1.message, e2: e2.message, e3: e3.message});
+                            console.log('Available Arrow methods:', Object.keys(Arrow));
+                            throw new Error(`Unable to parse Arrow file with any known API method`);
+                        }
+                    }
+                }
+
+                console.log(`Loaded ${dataset.file}: ${table.numRows} rows, ${table.numCols} columns`);
+                console.log('Columns:', table.schema.fields.map(f => f.name));
+
+                this.arrowData.set(dataset.name, {
+                    table: table,
+                    dataset: dataset
+                });
+
+            } catch (error) {
+                console.error(`Failed to load ${dataset.file}:`, error);
+                throw new Error(`Could not load ${dataset.file}. Make sure you've exported the Arrow file first.`);
+            }
+        }
+
+        this.updateDataStatus(`Loaded ${this.arrowData.size} Arrow datasets successfully`);
     }
 
     setupUI() {
@@ -179,17 +237,8 @@ class BitcoinFeeExplorer {
             const traces = [];
             const metricNames = Array.from(this.selectedMetrics).map(m => m.name);
 
-            // Get metric data from WASM
-            try {
-                const metricData = this.explorer.get_metric_data(metricNames, startHeight, endHeight);
-
-                // For now, create mock traces since we don't have real data
-                this.createMockTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow);
-
-            } catch (error) {
-                console.warn('WASM data loading failed, using mock data:', error);
-                this.createMockTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow);
-            }
+            // Get metric data from Arrow files
+            this.createArrowTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow);
 
             await Plotly.react(this.chart, traces, this.getChartLayout());
             this.updateStatus('Chart updated successfully');
@@ -197,6 +246,71 @@ class BitcoinFeeExplorer {
         } catch (error) {
             console.error('Chart update failed:', error);
             this.updateStatus(`Chart update failed: ${error.message}`);
+        }
+    }
+
+    createArrowTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow) {
+        // Get data from Arrow files
+        for (const [datasetName, {table, dataset}] of this.arrowData) {
+            // Get height column
+            const heightColumn = table.getChild('height');
+            const heights = heightColumn.toArray();
+
+            // Filter data by height range
+            const indices = [];
+            for (let i = 0; i < heights.length; i++) {
+                const height = heights[i];
+                if (height >= startHeight && height <= endHeight) {
+                    indices.push(i);
+                }
+            }
+
+            // Process each requested metric
+            for (const metricName of metricNames) {
+                if (table.schema.fields.find(f => f.name === metricName)) {
+                    const metric = Array.from(this.selectedMetrics).find(m => m.name === metricName);
+                    const column = table.getChild(metricName);
+
+                    // Extract filtered data
+                    const filteredHeights = indices.map(i => heights[i]);
+                    const filteredValues = indices.map(i => column.get(i));
+
+                    // Create trace
+                    const yaxis = this.assignYAxis(metric.unit);
+                    const trace = {
+                        x: filteredHeights,
+                        y: filteredValues,
+                        name: `${metricName} (${metric.unit})`,
+                        type: 'scatter',
+                        mode: 'lines',
+                        yaxis: yaxis,
+                        line: {
+                            width: 1.5
+                        }
+                    };
+
+                    traces.push(trace);
+
+                    // Add moving average if requested
+                    if (showMA && filteredHeights.length > maWindow) {
+                        const maData = this.calculateMovingAverage(filteredValues, maWindow);
+                        const maTrace = {
+                            x: filteredHeights.slice(maWindow - 1),
+                            y: maData,
+                            name: `${metricName} MA(${maWindow})`,
+                            type: 'scatter',
+                            mode: 'lines',
+                            yaxis: yaxis,
+                            line: {
+                                width: 2,
+                                dash: 'dash'
+                            },
+                            opacity: 0.8
+                        };
+                        traces.push(maTrace);
+                    }
+                }
+            }
         }
     }
 

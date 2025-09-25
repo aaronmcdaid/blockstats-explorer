@@ -1,51 +1,29 @@
 {
   "version": "1.0",
   "block_range": {
-    "start": 700000,
-    "end": 800000
+    "start": 0,
+    "end": 1000
   },
   "datasets": [
     {
-      "name": "Basic Stats",
-      "file": "basic_stats.arrow",
+      "name": "Complete Analysis",
+      "file": "complete_analysis.arrow",
       "columns": {
         "height": {"type": "index", "description": "Block height"},
-        "timestamp": {"type": "index", "description": "Block timestamp"},
+        "timestamp": {"type": "index", "description": "Block timestamp (Unix seconds)"},
         "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
         "fee_avg": {"type": "metric", "unit": "sat/vB", "description": "Average fee rate"},
-        "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"}
-      }
-    },
-    {
-      "name": "Fee Analysis",
-      "file": "fee_analysis.arrow",
-      "columns": {
-        "height": {"type": "index", "description": "Block height"},
-        "fee_min": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
-        "fee_q25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee"},
-        "fee_median": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},
-        "fee_q75": {"type": "metric", "unit": "sat/vB", "description": "75th percentile fee"},
-        "fee_max": {"type": "metric", "unit": "sat/vB", "description": "Maximum fee rate"}
-      }
-    },
-    {
-      "name": "Transaction Analysis",
-      "file": "tx_analysis.arrow",
-      "columns": {
-        "height": {"type": "index", "description": "Block height"},
-        "sub_1sat_count": {"type": "metric", "unit": "transactions", "description": "Sub-1sat/vB transactions"},
-        "op_return_max_size": {"type": "metric", "unit": "bytes", "description": "Largest OP_RETURN size"},
-        "op_return_count": {"type": "metric", "unit": "transactions", "description": "Number of OP_RETURN transactions"}
-      }
-    },
-    {
-      "name": "Mining Data",
-      "file": "mining.arrow",
-      "columns": {
-        "height": {"type": "index", "description": "Block height"},
-        "miner": {"type": "filter", "description": "Mining pool name"},
-        "difficulty": {"type": "metric", "unit": "difficulty", "description": "Mining difficulty"},
-        "hash_rate": {"type": "metric", "unit": "EH/s", "description": "Estimated hash rate"}
+        "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"},
+        "fees_0": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
+        "fees_25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee rate"},
+        "fees_50": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},
+        "fees_75": {"type": "metric", "unit": "sat/vB", "description": "75th percentile fee rate"},
+        "fees_100": {"type": "metric", "unit": "sat/vB", "description": "Maximum fee rate"},
+        "tx_size_0": {"type": "metric", "unit": "vbytes", "description": "Minimum transaction size"},
+        "tx_size_25": {"type": "metric", "unit": "vbytes", "description": "25th percentile transaction size"},
+        "tx_size_50": {"type": "metric", "unit": "vbytes", "description": "Median transaction size"},
+        "tx_size_75": {"type": "metric", "unit": "vbytes", "description": "75th percentile transaction size"},
+        "tx_size_100": {"type": "metric", "unit": "vbytes", "description": "Maximum transaction size"}
       }
     }
   ]
