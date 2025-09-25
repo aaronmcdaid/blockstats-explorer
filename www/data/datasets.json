@@ -2,7 +2,7 @@
   "version": "1.0",
   "block_range": {
     "start": 0,
-    "end": 1000
+    "end": 0
   },
   "datasets": [
     {

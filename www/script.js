@@ -41,7 +41,7 @@ class BitcoinFeeExplorer {
         const metadataText = await response.text();
         this.metadata = JSON.parse(metadataText);
 
-        await this.explorer.load_metadata(metadataText);
+        // Don't load into WASM yet - we'll update the range first after loading Arrow files
     }
 
     async loadDatasets() {
@@ -59,6 +59,8 @@ class BitcoinFeeExplorer {
 
         console.log('Arrow library available:', typeof Arrow);
         this.arrowData = new Map();
+        let minHeight = Infinity;
+        let maxHeight = -Infinity;
 
         // Load each Arrow file from the metadata
         for (const dataset of this.metadata.datasets) {
@@ -100,6 +102,17 @@ class BitcoinFeeExplorer {
                 console.log(`Loaded ${dataset.file}: ${table.numRows} rows, ${table.numCols} columns`);
                 console.log('Columns:', table.schema.fields.map(f => f.name));
 
+                // Find min/max heights from this dataset
+                const heightColumn = table.getChild('height');
+                if (heightColumn && table.numRows > 0) {
+                    const heights = heightColumn.toArray();
+                    const datasetMin = Math.min(...heights);
+                    const datasetMax = Math.max(...heights);
+                    minHeight = Math.min(minHeight, datasetMin);
+                    maxHeight = Math.max(maxHeight, datasetMax);
+                    console.log(`Dataset ${dataset.file} height range: ${datasetMin} to ${datasetMax}`);
+                }
+
                 this.arrowData.set(dataset.name, {
                     table: table,
                     dataset: dataset
@@ -110,6 +123,21 @@ class BitcoinFeeExplorer {
                 throw new Error(`Could not load ${dataset.file}. Make sure you've exported the Arrow file first.`);
             }
         }
+
+        // Update metadata with discovered block range
+        if (minHeight !== Infinity && maxHeight !== -Infinity) {
+            this.metadata.block_range = {
+                start: minHeight,
+                end: maxHeight
+            };
+            console.log(`Discovered block range: ${minHeight} to ${maxHeight}`);
+        } else {
+            console.warn('No height data found in Arrow files, keeping default range');
+        }
+
+        // Now load the updated metadata into WASM
+        const updatedMetadata = JSON.stringify(this.metadata);
+        await this.explorer.load_metadata(updatedMetadata);
 
         this.updateDataStatus(`Loaded ${this.arrowData.size} Arrow datasets successfully`);
     }
