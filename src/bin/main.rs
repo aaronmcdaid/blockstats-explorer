@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::collections::HashMap;
 use std::io;
+use std::sync::Arc;
 use bitcoin::BlockHash;
 use bitcoin::hashes::Hash;
 use bitcoin::{Amount, Transaction};
@@ -692,6 +693,78 @@ fn export_arrow_file(
     writer.close()?;
 
     println!("Successfully exported {} rows to {}", processed_count, filename.display());
+
+    // Immediately verify the exported file by reopening it
+    println!("\n🔍 Verifying exported Arrow file...");
+    verify_arrow_file(&filename)?;
+
     Ok(())
+}
+
+fn verify_arrow_file(filename: &PathBuf) -> anyhow::Result<()> {
+    use arrow_ipc::reader::FileReader;
+    use std::fs::File;
+
+    let file = File::open(filename)?;
+    let reader = FileReader::try_new(file, None)?;
+
+    let schema = reader.schema();
+    let total_rows: usize = reader.into_iter().map(|batch| batch.unwrap().num_rows()).sum();
+
+    println!("✅ Arrow file verification successful!");
+    println!("📊 Schema Summary:");
+    println!("   - Total columns: {}", schema.fields().len());
+    println!("   - Total rows: {}", total_rows);
+    println!("   - File size: {} bytes", std::fs::metadata(filename)?.len());
+
+    println!("\n📋 Column Details:");
+    for (i, field) in schema.fields().iter().enumerate() {
+        println!("   {}. {} ({})",
+                 i + 1,
+                 field.name(),
+                 format_data_type(field.data_type()));
+    }
+
+    // Show first few values from each column for a quick data preview
+    let file = File::open(filename)?;
+    let mut reader = FileReader::try_new(file, None)?;
+
+    if let Some(Ok(first_batch)) = reader.next() {
+        if first_batch.num_rows() > 0 {
+            println!("\n📈 Sample Data (first row):");
+            for (i, array) in first_batch.columns().iter().enumerate() {
+                let field = schema.field(i);
+                let sample_value = format_array_value(array, 0);
+                println!("   {}: {}", field.name(), sample_value);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn format_data_type(data_type: &arrow::datatypes::DataType) -> &'static str {
+    match data_type {
+        arrow::datatypes::DataType::Float64 => "Float64",
+        arrow::datatypes::DataType::Int32 => "Int32",
+        arrow::datatypes::DataType::Int64 => "Int64",
+        arrow::datatypes::DataType::Utf8 => "String",
+        _ => "Other",
+    }
+}
+
+fn format_array_value(array: &Arc<dyn arrow::array::Array>, index: usize) -> String {
+    use arrow::array::Array;
+
+    if array.is_null(index) {
+        return "null".to_string();
+    }
+
+    // Try to cast to Float64Array since that's what we use
+    if let Some(float_array) = array.as_any().downcast_ref::<arrow::array::Float64Array>() {
+        format!("{:.2}", float_array.value(index))
+    } else {
+        "unknown".to_string()
+    }
 }
 
