@@ -491,9 +491,15 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
         "tx_count" => Ok(|block, _height| block.txdata.len() as f64),
         "fee_avg" => Ok(|block, height| {
             let fees = calculate_block_fees(&block.txdata, height);
-            let tx_count = block.txdata.len().saturating_sub(1); // Exclude coinbase
-            if tx_count > 0 {
-                fees.to_sat() as f64 / tx_count as f64
+
+            // Calculate total vBytes for non-coinbase transactions
+            let total_vbytes: f64 = block.txdata.iter()
+                .skip(1) // Skip coinbase
+                .map(|tx| tx.weight().to_wu() as f64 / 4.0)
+                .sum();
+
+            if total_vbytes > 0.0 {
+                fees.to_sat() as f64 / total_vbytes
             } else {
                 0.0
             }
