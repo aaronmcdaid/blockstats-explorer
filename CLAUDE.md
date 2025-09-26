@@ -95,10 +95,10 @@ cargo run --bin main -- iterate --datadir /custom/path
 ### Export Arrow Data for Frontend
 ```bash
 # Export all available columns (recommended)
-cargo run --bin main -- export complete_analysis.arrow height timestamp tx_count fee_avg block_size fees[0,25,50,75,100] tx_size[0,25,50,75,100]
+cargo run --bin main -- export complete_analysis.arrow height timestamp tx_count fee_avg block_size tx_size[0,25,50,75,100]
 
 # Export specific metrics only
-cargo run --bin main -- export fees_only.arrow height fee_avg fees[0,50,100]
+cargo run --bin main -- export basic.arrow height fee_avg tx_count
 
 # Export with height limit
 cargo run --bin main -- export recent.arrow height tx_count fee_avg --max-height 1000
@@ -192,7 +192,7 @@ cargo run --bin main -- iterate --start-height 100 --end-height 90
 ./scripts/build.sh
 
 # Export data for frontend (place in www/data/)
-cargo run --bin main -- export www/data/complete_analysis.arrow height timestamp tx_count fee_avg block_size fees[0,25,50,75,100] tx_size[0,25,50,75,100]
+cargo run --bin main -- export www/data/complete_analysis.arrow height timestamp tx_count fee_avg block_size tx_size[0,25,50,75,100]
 
 # Serve locally
 python3 -m http.server 8000 --directory www
@@ -234,7 +234,7 @@ Benefits: clearer logic, better error handling, easier debugging.
 - **Dynamic Data Loading**: Automatically loads Arrow files and discovers block range
 - **Interactive Charts**: Plotly.js with zoom, pan, hover, and reset controls
 - **Multi-Metric Selection**: Choose from 15+ available blockchain metrics
-- **Quantile Analysis**: Fee rate and transaction size percentiles (0th, 25th, 50th, 75th, 100th)
+- **Quantile Analysis**: Transaction size percentiles (0th, 25th, 50th, 75th, 100th)
 - **Dual Y-Axis**: Smart grouping by units (sat/vB, bytes, transactions on left; difficulty on right)
 - **Moving Averages**: Configurable window size with dashed line overlay
 - **Log Scale**: Toggle logarithmic scaling for better visualization of wide ranges
@@ -263,7 +263,7 @@ cargo build --bin main
 cargo run --bin main -- build-index
 
 # Export data for frontend (complete dataset)
-cargo run --bin main -- export www/data/complete_analysis.arrow height timestamp tx_count fee_avg block_size fees[0,25,50,75,100] tx_size[0,25,50,75,100]
+cargo run --bin main -- export www/data/complete_analysis.arrow height timestamp tx_count fee_avg block_size tx_size[0,25,50,75,100]
 
 # Quick test iteration
 cargo run --bin main -- iterate --start-height 10 --end-height 0

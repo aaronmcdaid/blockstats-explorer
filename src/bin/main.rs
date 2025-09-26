@@ -509,32 +509,6 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
 
 fn get_multi_column_extractor(base_name: &str) -> anyhow::Result<MultiColumnExtractor> {
     match base_name {
-        "fees" => Ok(|block, _height| {
-            // Calculate fee rate for each non-coinbase transaction
-            let mut fee_rates = Vec::new();
-
-            for (tx_idx, tx) in block.txdata.iter().enumerate() {
-                if tx_idx == 0 {
-                    continue; // Skip coinbase
-                }
-
-                // Calculate fee rate (simplified - assumes we can get input values)
-                // For now, use a placeholder since we'd need UTXO data for exact calculation
-                let tx_weight = tx.weight().to_wu() as f64;
-                let tx_vsize = tx_weight / 4.0;
-
-                // Estimate fee as output difference (placeholder)
-                // In real implementation, we'd need input values from UTXO set
-                let estimated_fee = 1000.0; // Placeholder sat
-
-                if tx_vsize > 0.0 {
-                    fee_rates.push(estimated_fee / tx_vsize);
-                }
-            }
-
-            fee_rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            fee_rates
-        }),
         "tx_size" => Ok(|block, _height| {
             // Transaction sizes in vbytes
             let mut sizes: Vec<f64> = block.txdata.iter()
