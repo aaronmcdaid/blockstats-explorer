@@ -1,10 +1,11 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
 use std::io;
 use std::sync::Arc;
 use bitcoin::BlockHash;
-use bitcoin::hashes::Hash;
+use bitcoin::hashes::Hash as BitcoinHash;
 use bitcoin::{Amount, Transaction};
 use block_parser::BlockFileReader;
 use index::{BlockIndex, BlockLocation};
@@ -52,6 +53,8 @@ enum Commands {
         columns: Vec<String>,
         #[arg(long, help = "Maximum block height to export (default: tip)")]
         max_height: Option<u32>,
+        #[arg(long, help = "Enable UTXO tracking for accurate per-transaction fee calculations")]
+        utxo: bool,
     },
 }
 
@@ -80,10 +83,13 @@ fn main() -> anyhow::Result<()> {
             println!("Iterating blocks from {:?} to {:?}", start_height, end_height);
             iterate_blocks(expanded_datadir, start_height, end_height)?;
         }
-        Commands::Export { datadir, filename, columns, max_height } => {
+        Commands::Export { datadir, filename, columns, max_height, utxo } => {
             let expanded_datadir = expand_tilde(&datadir);
             println!("Exporting columns {:?} to {}", columns, filename.display());
-            export_arrow_file(expanded_datadir, filename, columns, max_height)?;
+            if utxo {
+                println!("🔍 UTXO tracking enabled for accurate fee calculations");
+            }
+            export_arrow_file(expanded_datadir, filename, columns, max_height, utxo)?;
         }
     }
 
@@ -144,6 +150,63 @@ fn calculate_block_fees(transactions: &[Transaction], height: u32) -> Amount {
     }
 }
 
+fn utxo_key(txid: &bitcoin::Txid, output_index: u32) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(txid, &mut hasher);
+    std::hash::Hash::hash(&output_index, &mut hasher);
+    hasher.finish()
+}
+
+struct UtxoSet {
+    active: HashMap<u64, u64>,
+    to_remove: HashSet<u64>,
+}
+
+impl UtxoSet {
+    fn new() -> Self {
+        Self {
+            active: HashMap::new(),
+            to_remove: HashSet::new(),
+        }
+    }
+
+    fn add_output(&mut self, txid: &bitcoin::Txid, output_index: u32, value_sats: u64, block_height: u32) -> anyhow::Result<()> {
+        let key = utxo_key(txid, output_index);
+
+        // Collision detection - error if key already exists (except blocks with duplicate coinbase)
+        if self.active.contains_key(&key) && block_height != 91842 && block_height != 91880 {
+            return Err(anyhow::anyhow!(
+                "UTXO key collision detected at block {}: {}:{} (hash: {})",
+                block_height, txid, output_index, key
+            ));
+        }
+
+        self.active.insert(key, value_sats);
+        Ok(())
+    }
+
+    fn mark_for_removal(&mut self, txid: &bitcoin::Txid, output_index: u32) {
+        let key = utxo_key(txid, output_index);
+        self.to_remove.insert(key);
+    }
+
+    fn get_value(&self, txid: &bitcoin::Txid, output_index: u32) -> Option<u64> {
+        let key = utxo_key(txid, output_index);
+        self.active.get(&key).copied()
+    }
+
+    fn commit_removals(&mut self) {
+        for key in &self.to_remove {
+            self.active.remove(key);
+        }
+        self.to_remove.clear();
+    }
+
+    fn len(&self) -> usize {
+        self.active.len()
+    }
+}
+
 fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
     println!("Building index from data directory: {}", datadir.display());
 
@@ -201,7 +264,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
             );
 
             // Check if this is the genesis block (prev_hash is all zeros)
-            if prev_hash == BlockHash::all_zeros() {
+            if prev_hash == BlockHash::from_byte_array([0; 32]) {
                 genesis_hash = Some(block_hash);
                 println!("Found genesis block: {}", block_hash);
             }
@@ -368,7 +431,7 @@ fn build_index(datadir: PathBuf) -> anyhow::Result<()> {
             block_index.add_block(current_height, location);
 
             // Move to previous block
-            if *prev_hash == BlockHash::all_zeros() {
+            if *prev_hash == BlockHash::from_byte_array([0; 32]) {
                 // Reached genesis, we're done
                 break;
             }
@@ -513,6 +576,14 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
     }
 }
 
+fn column_requires_utxo(column_name: &str) -> bool {
+    match column_name {
+        // Future columns that would require UTXO data:
+        // "tx_fees" | "fee_rates" => true,
+        _ => false,
+    }
+}
+
 fn get_multi_column_extractor(base_name: &str) -> anyhow::Result<MultiColumnExtractor> {
     match base_name {
         "tx_size" => Ok(|block, _height| {
@@ -559,6 +630,7 @@ fn export_arrow_file(
     filename: PathBuf,
     columns: Vec<String>,
     max_height: Option<u32>,
+    utxo: bool,
 ) -> anyhow::Result<()> {
     use arrow::array::{Float64Builder, RecordBatch, RecordBatchWriter};
     use arrow::datatypes::{DataType, Field, Schema};
@@ -594,6 +666,25 @@ fn export_arrow_file(
         column_specs.push(spec);
     }
 
+    // Validate that columns requiring UTXO data have the --utxo flag
+    if !utxo {
+        for column_input in &columns {
+            let base_name = column_input.split('[').next().unwrap_or(column_input);
+            if column_requires_utxo(base_name) {
+                return Err(anyhow::anyhow!(
+                    "Column '{}' requires UTXO tracking for accurate calculations.\n\
+                     Please add the --utxo flag to enable UTXO tracking:\n\
+                     \n\
+                     cargo run --bin main -- export {} --utxo [other options]\n\
+                     \n\
+                     Note: UTXO tracking uses more memory but provides accurate per-transaction data.",
+                    column_input,
+                    filename.display()
+                ));
+            }
+        }
+    }
+
     println!("Exporting {} columns (expanded to {} columns) from height {} to {}",
              columns.len(), expanded_column_names.len(), export_min_height, export_max_height);
 
@@ -608,6 +699,13 @@ fn export_arrow_file(
         .map(|_| Float64Builder::new())
         .collect();
 
+    // Initialize UTXO set if needed
+    let mut utxo_set = if utxo {
+        Some(UtxoSet::new())
+    } else {
+        None
+    };
+
     // Process blocks and collect data
     let mut processed_count = 0;
     for height in export_min_height..=export_max_height {
@@ -616,6 +714,20 @@ fn export_arrow_file(
             reader.seek_to_offset(location.file_offset)?;
 
             if let Some((block, _offset)) = reader.read_next_block()? {
+                // UTXO tracking: Add block outputs to UTXO set
+                if let Some(ref mut utxo) = utxo_set {
+                    for (_tx_idx, tx) in block.txdata.iter().enumerate() {
+                        let txid = tx.txid();
+                        for (output_idx, output) in tx.output.iter().enumerate() {
+                            // Skip OP_RETURN outputs (provably unspendable)
+                            if output.script_pubkey.is_op_return() {
+                                continue;
+                            }
+                            utxo.add_output(&txid, output_idx as u32, output.value.to_sat(), height)?;
+                        }
+                    }
+                }
+
                 // Extract values for each column spec
                 let mut builder_idx = 0;
 
@@ -643,6 +755,24 @@ fn export_arrow_file(
                                 builder_idx += 1;
                             }
                         }
+                    }
+                }
+
+                // UTXO tracking: Mark block inputs for removal and commit
+                if let Some(ref mut utxo) = utxo_set {
+                    for (tx_idx, tx) in block.txdata.iter().enumerate() {
+                        if tx_idx == 0 {
+                            continue; // Skip coinbase (no inputs to spend)
+                        }
+                        for input in &tx.input {
+                            utxo.mark_for_removal(&input.previous_output.txid, input.previous_output.vout);
+                        }
+                    }
+                    utxo.commit_removals();
+
+                    // Log UTXO set size periodically
+                    if processed_count % 1000 == 0 && processed_count > 0 {
+                        println!("Block {}: UTXO set size: {} UTXOs", processed_count, utxo.len());
                     }
                 }
 
