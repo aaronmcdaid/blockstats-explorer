@@ -504,8 +504,8 @@ fn iterate_blocks(datadir: PathBuf, start_height: Option<u32>, end_height: Optio
 }
 
 // Column extraction functions
-type ColumnExtractor = fn(&bitcoin::Block, u32) -> f64;
-type MultiColumnExtractor = fn(&bitcoin::Block, u32) -> Vec<f64>;
+type ColumnExtractor = fn(&bitcoin::Block, u32, Option<&UtxoSet>) -> f64;
+type MultiColumnExtractor = fn(&bitcoin::Block, u32, Option<&UtxoSet>) -> Vec<f64>;
 
 #[derive(Debug, Clone)]
 enum ColumnSpec {
@@ -549,10 +549,10 @@ fn parse_column_spec(column_input: &str) -> anyhow::Result<ColumnSpec> {
 
 fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
     match column_name {
-        "height" => Ok(|_block, height| height as f64),
-        "timestamp" => Ok(|block, _height| block.header.time as f64),
-        "tx_count" => Ok(|block, _height| block.txdata.len() as f64),
-        "fee_avg" => Ok(|block, height| {
+        "height" => Ok(|_block, height, _utxo| height as f64),
+        "timestamp" => Ok(|block, _height, _utxo| block.header.time as f64),
+        "tx_count" => Ok(|block, _height, _utxo| block.txdata.len() as f64),
+        "fee_avg" => Ok(|block, height, _utxo| {
             let fees = calculate_block_fees(&block.txdata, height);
 
             // Calculate total vBytes for non-coinbase transactions
@@ -567,7 +567,7 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
                 0.0
             }
         }),
-        "block_size" => Ok(|_block, _height| {
+        "block_size" => Ok(|_block, _height, _utxo| {
             // Note: block_size is now cached in the index, this function won't be used for block_size
             // This is kept for compatibility, but the export function uses cached values
             0.0
@@ -578,15 +578,14 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
 
 fn column_requires_utxo(column_name: &str) -> bool {
     match column_name {
-        // Future columns that would require UTXO data:
-        // "tx_fees" | "fee_rates" => true,
+        "fee_rates" => true,
         _ => false,
     }
 }
 
 fn get_multi_column_extractor(base_name: &str) -> anyhow::Result<MultiColumnExtractor> {
     match base_name {
-        "tx_size" => Ok(|block, _height| {
+        "tx_size" => Ok(|block, _height, _utxo| {
             // Transaction sizes in vbytes
             let mut sizes: Vec<f64> = block.txdata.iter()
                 .skip(1) // Skip coinbase
@@ -595,6 +594,45 @@ fn get_multi_column_extractor(base_name: &str) -> anyhow::Result<MultiColumnExtr
 
             sizes.sort_by(|a, b| a.partial_cmp(b).unwrap());
             sizes
+        }),
+        "fee_rates" => Ok(|block, _height, utxo| {
+            let utxo_set = utxo.expect("fee_rates requires UTXO data - this should have been caught by validation");
+
+            // Calculate fee rate for each non-coinbase transaction
+            let mut fee_rates = Vec::new();
+
+            for (tx_idx, tx) in block.txdata.iter().enumerate() {
+                if tx_idx == 0 {
+                    continue; // Skip coinbase
+                }
+
+                // Calculate input value (assume all inputs are in UTXO set)
+                let mut input_value = 0u64;
+                for input in &tx.input {
+                    let value = utxo_set.get_value(&input.previous_output.txid, input.previous_output.vout)
+                        .expect("Input not found in UTXO set");
+                    input_value += value;
+                }
+
+                // Calculate output value
+                let output_value: u64 = tx.output.iter()
+                    .map(|output| output.value.to_sat())
+                    .sum();
+
+                // Assert that input >= output (no value creation)
+                assert!(input_value >= output_value, "Input value {} < output value {} for transaction", input_value, output_value);
+
+                // Calculate fee and fee rate
+                let fee = input_value - output_value;
+                let tx_vsize = tx.weight().to_wu() as f64 / 4.0;
+
+                if tx_vsize > 0.0 {
+                    fee_rates.push(fee as f64 / tx_vsize);
+                }
+            }
+
+            fee_rates.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            fee_rates
         }),
         _ => Err(anyhow::anyhow!("Unknown multi-column: {}", base_name)),
     }
@@ -739,14 +777,14 @@ fn export_arrow_file(
                                 location.block_size as f64
                             } else {
                                 // Use extractor function
-                                extractor(&block, height)
+                                extractor(&block, height, utxo_set.as_ref())
                             };
                             builders[builder_idx].append_value(value);
                             builder_idx += 1;
                         }
                         ColumnSpec::Multi(_, quantiles, extractor) => {
                             // Extract all values and calculate quantiles
-                            let data = extractor(&block, height);
+                            let data = extractor(&block, height, utxo_set.as_ref());
                             let quantile_values = calculate_quantiles(&data, quantiles);
 
                             // Append each quantile value to its respective builder
