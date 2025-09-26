@@ -14,6 +14,7 @@
         "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
         "fee_avg": {"type": "metric", "unit": "sat/vB", "description": "Average fee rate"},
         "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"},
+        "utxo_size": {"type": "metric", "unit": "UTXOs", "description": "Number of unspent transaction outputs"},
         "fee_rates_0": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
         "fee_rates_25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee rate"},
         "fee_rates_50": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},

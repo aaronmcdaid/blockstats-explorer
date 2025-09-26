@@ -572,13 +572,17 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
             // This is kept for compatibility, but the export function uses cached values
             0.0
         }),
+        "utxo_size" => Ok(|_block, _height, utxo| {
+            let utxo_set = utxo.expect("utxo_size requires UTXO data - this should have been caught by validation");
+            utxo_set.len() as f64
+        }),
         _ => Err(anyhow::anyhow!("Unknown column: {}", column_name)),
     }
 }
 
 fn column_requires_utxo(column_name: &str) -> bool {
     match column_name {
-        "fee_rates" => true,
+        "fee_rates" | "utxo_size" => true,
         _ => false,
     }
 }
