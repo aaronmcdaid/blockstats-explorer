@@ -182,6 +182,14 @@ class BitcoinFeeExplorer {
         this.populateMetricSelect();
         this.setupEventListeners();
         this.initializeChart();
+
+        // Hide mobile status overlay after UI is fully set up
+        if (window.innerWidth <= 767) {
+            const statusOverlay = document.querySelector('.status-overlay');
+            if (statusOverlay) {
+                statusOverlay.style.display = 'none';
+            }
+        }
     }
 
     populateMetricSelect() {
@@ -626,8 +634,17 @@ class BitcoinFeeExplorer {
     updateStatus(message) {
         const loadingStatusMobile = document.getElementById('loadingStatusMobile');
         const loadingStatusDesktop = document.getElementById('loadingStatusDesktop');
-        if (loadingStatusMobile) loadingStatusMobile.textContent = message;
-        if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
+
+        // On mobile, hide the status overlay when chart is ready
+        if (message.includes('Ready!') && window.innerWidth <= 767) {
+            const statusOverlay = document.querySelector('.status-overlay');
+            if (statusOverlay) {
+                statusOverlay.style.display = 'none';
+            }
+        } else {
+            if (loadingStatusMobile) loadingStatusMobile.textContent = message;
+            if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
+        }
     }
 
     updateDataStatus(message) {
