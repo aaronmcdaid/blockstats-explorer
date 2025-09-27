@@ -80,9 +80,10 @@ class BitcoinFeeExplorer {
                 this.updateStatus(`Loading dataset ${i + 1} of ${totalDatasets}: ${dataset.name}`);
                 console.log(`Loading ${dataset.file}...`);
 
-                // Step 1: Fetch file
+                // Step 1: Initiate download
                 const baseProgress = (i / totalDatasets) * 100;
-                this.updateProgress(baseProgress + 10);
+                const progressPerDataset = 100 / totalDatasets;
+                this.updateProgress(baseProgress);
 
                 const response = await fetch(`./data/${dataset.file}`);
                 console.log(`Response status for ${dataset.file}:`, response.status, response.statusText);
@@ -91,34 +92,66 @@ class BitcoinFeeExplorer {
                     throw new Error(`Failed to load ${dataset.file}: ${response.status} ${response.statusText}`);
                 }
 
-                // Step 2: Download data
-                this.updateProgress(baseProgress + 30);
-                const arrayBuffer = await response.arrayBuffer();
-                console.log(`${dataset.file} size:`, arrayBuffer.byteLength, 'bytes');
+                // Step 2: Download with progress tracking
+                const contentLength = response.headers.get('Content-Length');
+                const totalBytes = contentLength ? parseInt(contentLength) : null;
+                console.log(`${dataset.file} size: ${totalBytes ? (totalBytes / 1024 / 1024).toFixed(1) + ' MB' : 'unknown size'}`);
 
-                // Step 3: Parse Arrow data
-                this.updateProgress(baseProgress + 50);
+                let downloadedBytes = 0;
+                const chunks = [];
+                const reader = response.body.getReader();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    chunks.push(value);
+                    downloadedBytes += value.length;
+
+                    // Update progress during download (use 80% of the dataset's progress allocation for download)
+                    if (totalBytes) {
+                        const downloadProgress = (downloadedBytes / totalBytes) * 0.8; // 80% of this dataset's progress
+                        this.updateProgress(baseProgress + (downloadProgress * progressPerDataset));
+                        this.updateStatus(`Downloading ${dataset.name}: ${(downloadedBytes / 1024 / 1024).toFixed(1)} / ${(totalBytes / 1024 / 1024).toFixed(1)} MB`);
+                    } else {
+                        this.updateStatus(`Downloading ${dataset.name}: ${(downloadedBytes / 1024 / 1024).toFixed(1)} MB`);
+                    }
+                }
+
+                // Combine chunks into ArrayBuffer
+                const arrayBuffer = new Uint8Array(downloadedBytes);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    arrayBuffer.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                console.log(`${dataset.file} downloaded: ${arrayBuffer.byteLength} bytes`);
+
+                // Step 3: Parse Arrow data (use next 15% of progress)
+                this.updateProgress(baseProgress + (0.8 * progressPerDataset));
+                this.updateStatus(`Parsing ${dataset.name}...`);
 
                 // Try different Arrow API methods depending on version
                 let table;
                 try {
                     console.log(`Attempting to parse ${dataset.file} with tableFromIPC...`);
                     // Try the newer API first
-                    table = Arrow.tableFromIPC(arrayBuffer);
+                    table = Arrow.tableFromIPC(arrayBuffer.buffer);
                     console.log(`Successfully parsed ${dataset.file} with tableFromIPC`);
                 } catch (e1) {
                     console.log(`tableFromIPC failed for ${dataset.file}:`, e1.message);
                     try {
                         console.log(`Attempting ${dataset.file} with Table.from...`);
                         // Try alternative API
-                        table = Arrow.Table.from([Arrow.RecordBatch.from(arrayBuffer)]);
+                        table = Arrow.Table.from([Arrow.RecordBatch.from(arrayBuffer.buffer)]);
                         console.log(`Successfully parsed ${dataset.file} with Table.from`);
                     } catch (e2) {
                         console.log(`Table.from failed for ${dataset.file}:`, e2.message);
                         try {
                             console.log(`Attempting ${dataset.file} with RecordBatchFileReader...`);
                             // Try reading as IPC file
-                            const reader = Arrow.RecordBatchFileReader.from(arrayBuffer);
+                            const reader = Arrow.RecordBatchFileReader.from(arrayBuffer.buffer);
                             table = new Arrow.Table(reader.readAll());
                             console.log(`Successfully parsed ${dataset.file} with RecordBatchFileReader`);
                         } catch (e3) {
@@ -132,8 +165,9 @@ class BitcoinFeeExplorer {
                 console.log(`Loaded ${dataset.file}: ${table.numRows} rows, ${table.numCols} columns`);
                 console.log('Columns:', table.schema.fields.map(f => f.name));
 
-                // Step 4: Process height data
-                this.updateProgress(baseProgress + 80);
+                // Step 4: Process height data (use final 5% of progress)
+                this.updateProgress(baseProgress + (0.95 * progressPerDataset));
+                this.updateStatus(`Processing ${dataset.name}...`);
 
                 // Find min/max heights from this dataset
                 try {
