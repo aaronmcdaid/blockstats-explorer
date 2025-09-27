@@ -70,9 +70,19 @@ class BitcoinFeeExplorer {
         let maxHeight = -Infinity;
 
         // Load each Arrow file from the metadata
-        for (const dataset of this.metadata.datasets) {
+        const totalDatasets = this.metadata.datasets.length;
+        this.updateProgress(0, true); // Show progress bar at 0%
+
+        for (let i = 0; i < this.metadata.datasets.length; i++) {
+            const dataset = this.metadata.datasets[i];
             try {
+                // Update status and progress for current dataset
+                this.updateStatus(`Loading dataset ${i + 1} of ${totalDatasets}: ${dataset.name}`);
                 console.log(`Loading ${dataset.file}...`);
+
+                // Step 1: Fetch file
+                const baseProgress = (i / totalDatasets) * 100;
+                this.updateProgress(baseProgress + 10);
 
                 const response = await fetch(`./data/${dataset.file}`);
                 console.log(`Response status for ${dataset.file}:`, response.status, response.statusText);
@@ -81,8 +91,13 @@ class BitcoinFeeExplorer {
                     throw new Error(`Failed to load ${dataset.file}: ${response.status} ${response.statusText}`);
                 }
 
+                // Step 2: Download data
+                this.updateProgress(baseProgress + 30);
                 const arrayBuffer = await response.arrayBuffer();
                 console.log(`${dataset.file} size:`, arrayBuffer.byteLength, 'bytes');
+
+                // Step 3: Parse Arrow data
+                this.updateProgress(baseProgress + 50);
 
                 // Try different Arrow API methods depending on version
                 let table;
@@ -117,6 +132,9 @@ class BitcoinFeeExplorer {
                 console.log(`Loaded ${dataset.file}: ${table.numRows} rows, ${table.numCols} columns`);
                 console.log('Columns:', table.schema.fields.map(f => f.name));
 
+                // Step 4: Process height data
+                this.updateProgress(baseProgress + 80);
+
                 // Find min/max heights from this dataset
                 try {
                     const heightColumn = table.getChild('height');
@@ -147,6 +165,9 @@ class BitcoinFeeExplorer {
                     dataset: dataset
                 });
 
+                // Complete this dataset
+                this.updateProgress(((i + 1) / totalDatasets) * 100);
+
             } catch (error) {
                 console.error(`Failed to load ${dataset.file}:`, error);
                 throw new Error(`Could not load ${dataset.file}. Make sure you've exported the Arrow file first.`);
@@ -175,6 +196,8 @@ class BitcoinFeeExplorer {
         await this.explorer.load_metadata(updatedMetadata);
         console.log('Metadata loaded into WASM successfully');
 
+        // Hide progress bar and show completion
+        this.updateProgress(100, false);
         this.updateDataStatus(`Loaded ${this.arrowData.size} Arrow datasets successfully`);
     }
 
@@ -656,6 +679,24 @@ class BitcoinFeeExplorer {
 
         if (loadingStatusMobile) loadingStatusMobile.textContent = message;
         if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
+    }
+
+    updateProgress(percentage, show = true) {
+        const progressContainerMobile = document.getElementById('progressContainerMobile');
+        const progressContainerDesktop = document.getElementById('progressContainerDesktop');
+        const progressBarMobile = document.getElementById('progressBarMobile');
+        const progressBarDesktop = document.getElementById('progressBarDesktop');
+
+        if (show) {
+            if (progressContainerMobile) progressContainerMobile.style.display = 'block';
+            if (progressContainerDesktop) progressContainerDesktop.style.display = 'block';
+        } else {
+            if (progressContainerMobile) progressContainerMobile.style.display = 'none';
+            if (progressContainerDesktop) progressContainerDesktop.style.display = 'none';
+        }
+
+        if (progressBarMobile) progressBarMobile.style.width = `${percentage}%`;
+        if (progressBarDesktop) progressBarDesktop.style.width = `${percentage}%`;
     }
 
     updateDataStatus(message) {

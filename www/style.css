@@ -88,6 +88,22 @@ body {
     margin-top: 8px;
 }
 
+.progress-container {
+    margin-top: 8px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    height: 100%;
+    background: #f7931a;
+    width: 0%;
+    transition: width 0.3s ease;
+    border-radius: 4px;
+}
+
 /* Fade out animation */
 .fade-out {
     opacity: 0;
@@ -326,6 +342,16 @@ button:not(.primary) {
         padding: 8px 16px;
         border-radius: 8px;
         margin-top: 12px;
+    }
+
+    header .progress-container {
+        background: rgba(255, 255, 255, 0.2);
+        height: 8px;
+        margin-top: 8px;
+    }
+
+    header .progress-bar {
+        background: white;
     }
 
     .controls {
