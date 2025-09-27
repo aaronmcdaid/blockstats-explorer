@@ -80,21 +80,29 @@ class BitcoinFeeExplorer {
                 // Try different Arrow API methods depending on version
                 let table;
                 try {
+                    console.log(`Attempting to parse ${dataset.file} with tableFromIPC...`);
                     // Try the newer API first
                     table = Arrow.tableFromIPC(arrayBuffer);
+                    console.log(`Successfully parsed ${dataset.file} with tableFromIPC`);
                 } catch (e1) {
+                    console.log(`tableFromIPC failed for ${dataset.file}:`, e1.message);
                     try {
+                        console.log(`Attempting ${dataset.file} with Table.from...`);
                         // Try alternative API
                         table = Arrow.Table.from([Arrow.RecordBatch.from(arrayBuffer)]);
+                        console.log(`Successfully parsed ${dataset.file} with Table.from`);
                     } catch (e2) {
+                        console.log(`Table.from failed for ${dataset.file}:`, e2.message);
                         try {
+                            console.log(`Attempting ${dataset.file} with RecordBatchFileReader...`);
                             // Try reading as IPC file
                             const reader = Arrow.RecordBatchFileReader.from(arrayBuffer);
                             table = new Arrow.Table(reader.readAll());
+                            console.log(`Successfully parsed ${dataset.file} with RecordBatchFileReader`);
                         } catch (e3) {
-                            console.log('Arrow API attempts failed:', {e1: e1.message, e2: e2.message, e3: e3.message});
+                            console.log('Arrow API attempts failed for', dataset.file, ':', {e1: e1.message, e2: e2.message, e3: e3.message});
                             console.log('Available Arrow methods:', Object.keys(Arrow));
-                            throw new Error(`Unable to parse Arrow file with any known API method`);
+                            throw new Error(`Unable to parse ${dataset.file} with any known API method`);
                         }
                     }
                 }
@@ -103,14 +111,28 @@ class BitcoinFeeExplorer {
                 console.log('Columns:', table.schema.fields.map(f => f.name));
 
                 // Find min/max heights from this dataset
-                const heightColumn = table.getChild('height');
-                if (heightColumn && table.numRows > 0) {
-                    const heights = heightColumn.toArray();
-                    const datasetMin = Math.min(...heights);
-                    const datasetMax = Math.max(...heights);
-                    minHeight = Math.min(minHeight, datasetMin);
-                    maxHeight = Math.max(maxHeight, datasetMax);
-                    console.log(`Dataset ${dataset.file} height range: ${datasetMin} to ${datasetMax}`);
+                try {
+                    const heightColumn = table.getChild('height');
+                    if (heightColumn && table.numRows > 0) {
+                        console.log(`Getting height data from ${dataset.file}...`);
+                        const heights = heightColumn.toArray();
+                        console.log(`Height array length: ${heights.length}, first few values:`, heights.slice(0, 5));
+
+                        // Use regular loop instead of spread operator to avoid "too many arguments" error
+                        let datasetMin = heights[0];
+                        let datasetMax = heights[0];
+                        for (let i = 1; i < heights.length; i++) {
+                            if (heights[i] < datasetMin) datasetMin = heights[i];
+                            if (heights[i] > datasetMax) datasetMax = heights[i];
+                        }
+
+                        minHeight = Math.min(minHeight, datasetMin);
+                        maxHeight = Math.max(maxHeight, datasetMax);
+                        console.log(`Dataset ${dataset.file} height range: ${datasetMin} to ${datasetMax}`);
+                    }
+                } catch (heightError) {
+                    console.error(`Error processing height data for ${dataset.file}:`, heightError);
+                    throw heightError;
                 }
 
                 this.arrowData.set(dataset.name, {

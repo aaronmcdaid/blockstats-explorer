@@ -14,17 +14,26 @@
         "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
         "fee_avg": {"type": "metric", "unit": "sat/vB", "description": "Average fee rate"},
         "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"},
-        "utxo_size": {"type": "metric", "unit": "UTXOs", "description": "Number of unspent transaction outputs"},
-        "fee_rates_0": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
-        "fee_rates_25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee rate"},
-        "fee_rates_50": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},
-        "fee_rates_75": {"type": "metric", "unit": "sat/vB", "description": "75th percentile fee rate"},
-        "fee_rates_100": {"type": "metric", "unit": "sat/vB", "description": "Maximum fee rate"},
         "tx_size_0": {"type": "metric", "unit": "vbytes", "description": "Minimum transaction size"},
         "tx_size_25": {"type": "metric", "unit": "vbytes", "description": "25th percentile transaction size"},
         "tx_size_50": {"type": "metric", "unit": "vbytes", "description": "Median transaction size"},
         "tx_size_75": {"type": "metric", "unit": "vbytes", "description": "75th percentile transaction size"},
         "tx_size_100": {"type": "metric", "unit": "vbytes", "description": "Maximum transaction size"}
+      }
+    },
+    {
+      "name": "UTXOs and Fees",
+      "file": "utxos_and_fees.arrow",
+      "columns": {
+        "height": {"type": "index", "description": "Block height"},
+        "timestamp": {"type": "index", "description": "Block timestamp (Unix seconds)"},
+        "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
+        "utxo_size": {"type": "metric", "unit": "UTXOs", "description": "Number of unspent transaction outputs"},
+        "fee_rates_0": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
+        "fee_rates_25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee rate"},
+        "fee_rates_50": {"type": "metric", "unit": "sat/vB", "description": "Median fee rate"},
+        "fee_rates_75": {"type": "metric", "unit": "sat/vB", "description": "75th percentile fee rate"},
+        "fee_rates_100": {"type": "metric", "unit": "sat/vB", "description": "Maximum fee rate"}
       }
     }
   ]
