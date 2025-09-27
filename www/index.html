@@ -24,15 +24,6 @@
             </div>
 
             <div class="control-group">
-                <label>Block Range:</label>
-                <div class="range-inputs">
-                    <input type="number" id="startHeight" placeholder="Start height">
-                    <span>to</span>
-                    <input type="number" id="endHeight" placeholder="End height">
-                </div>
-            </div>
-
-            <div class="control-group">
                 <label>Chart Options:</label>
                 <div class="chart-options">
                     <label><input type="checkbox" id="logScale"> Log Scale</label>
@@ -54,6 +45,12 @@
 
         <div class="chart-container">
             <div id="mainChart"></div>
+        </div>
+
+        <div class="data-info">
+            <div id="dataRange" class="data-range-info">
+                Loading...
+            </div>
         </div>
 
         <footer>

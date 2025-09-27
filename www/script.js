@@ -153,8 +153,12 @@ class BitcoinFeeExplorer {
                 end: maxHeight
             };
             console.log(`Discovered block range: ${minHeight} to ${maxHeight}`);
+
+            // Update the data range display
+            this.updateDataRangeDisplay(maxHeight);
         } else {
             console.warn('No height data found in Arrow files, keeping default range');
+            document.getElementById('dataRange').textContent = 'No data available';
         }
 
         // Now load the updated metadata into WASM
@@ -168,11 +172,6 @@ class BitcoinFeeExplorer {
         this.populateMetricSelect();
         this.setupEventListeners();
         this.initializeChart();
-
-        // Set default range
-        const range = this.metadata.block_range;
-        document.getElementById('startHeight').value = range.start;
-        document.getElementById('endHeight').value = range.end;
     }
 
     populateMetricSelect() {
@@ -279,8 +278,8 @@ class BitcoinFeeExplorer {
         this.updateStatus('Updating chart...');
 
         try {
-            const startHeight = parseInt(document.getElementById('startHeight').value) || this.metadata.block_range.start;
-            const endHeight = parseInt(document.getElementById('endHeight').value) || this.metadata.block_range.end;
+            const startHeight = this.metadata.block_range.start;
+            const endHeight = this.metadata.block_range.end;
             const showMA = document.getElementById('showMA').checked;
             const maWindow = parseInt(document.getElementById('maWindow').value) || 200;
 
@@ -516,6 +515,39 @@ class BitcoinFeeExplorer {
 
     updateDataStatus(message) {
         document.getElementById('dataStatus').textContent = message;
+    }
+
+    updateDataRangeDisplay(maxHeight) {
+        // Find the timestamp for the highest block height
+        let maxTimestamp = null;
+
+        for (const [datasetName, {table, dataset}] of this.arrowData) {
+            const heightColumn = table.getChild('height');
+            const timestampColumn = table.getChild('timestamp');
+
+            if (heightColumn && timestampColumn) {
+                const heights = heightColumn.toArray();
+                const timestamps = timestampColumn.toArray();
+
+                for (let i = 0; i < heights.length; i++) {
+                    if (heights[i] === maxHeight) {
+                        maxTimestamp = timestamps[i];
+                        break;
+                    }
+                }
+
+                if (maxTimestamp !== null) break;
+            }
+        }
+
+        // Format the display message
+        let message = `Latest block: ${maxHeight}`;
+        if (maxTimestamp !== null) {
+            const date = new Date(maxTimestamp * 1000); // Convert Unix timestamp to Date
+            message += ` (${date.toLocaleDateString()} ${date.toLocaleTimeString()})`;
+        }
+
+        document.getElementById('dataRange').textContent = message;
     }
 }
 
