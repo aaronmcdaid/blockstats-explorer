@@ -233,7 +233,7 @@ class BitcoinFeeExplorer {
         const chartDiv = document.getElementById('mainChart');
 
         const layout = {
-            title: 'Bitcoin Block Statistics',
+            title: 'BlockStats Explorer',
             height: 600,
             xaxis: {
                 title: 'Block Height',
@@ -463,7 +463,7 @@ class BitcoinFeeExplorer {
         const logScale = document.getElementById('logScale').checked;
 
         return {
-            title: 'Bitcoin Block Statistics',
+            title: 'BlockStats Explorer',
             height: 600,
             xaxis: {
                 title: 'Block Height',
