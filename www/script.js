@@ -183,13 +183,32 @@ class BitcoinFeeExplorer {
         this.setupEventListeners();
         this.initializeChart();
 
-        // Hide mobile status overlay after UI is fully set up
-        if (window.innerWidth <= 767) {
-            const statusOverlay = document.querySelector('.status-overlay');
-            if (statusOverlay) {
-                statusOverlay.style.display = 'none';
+        // Hide loading headers after UI is fully set up with animation
+        this.hideLoadingHeaders();
+    }
+
+    hideLoadingHeaders() {
+        // Pause for 1 second to let users see the final message, then animate
+        setTimeout(() => {
+            const headerMobile = document.getElementById('headerOverlayMobile');
+            const headerDesktop = document.getElementById('headerDesktop');
+
+            if (headerMobile) {
+                headerMobile.classList.add('slide-up');
+                // Remove from DOM after animation completes
+                setTimeout(() => {
+                    headerMobile.style.display = 'none';
+                }, 600);
             }
-        }
+
+            if (headerDesktop) {
+                headerDesktop.classList.add('slide-up');
+                // Remove from DOM after animation completes
+                setTimeout(() => {
+                    headerDesktop.style.display = 'none';
+                }, 600);
+            }
+        }, 1000); // 1 second pause before animation starts
     }
 
     populateMetricSelect() {
@@ -635,16 +654,8 @@ class BitcoinFeeExplorer {
         const loadingStatusMobile = document.getElementById('loadingStatusMobile');
         const loadingStatusDesktop = document.getElementById('loadingStatusDesktop');
 
-        // On mobile, hide the status overlay when chart is ready
-        if (message.includes('Ready!') && window.innerWidth <= 767) {
-            const statusOverlay = document.querySelector('.status-overlay');
-            if (statusOverlay) {
-                statusOverlay.style.display = 'none';
-            }
-        } else {
-            if (loadingStatusMobile) loadingStatusMobile.textContent = message;
-            if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
-        }
+        if (loadingStatusMobile) loadingStatusMobile.textContent = message;
+        if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
     }
 
     updateDataStatus(message) {

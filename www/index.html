@@ -12,9 +12,10 @@
     <div class="container">
         <!-- Mobile overlay controls -->
         <div class="mobile-overlay">
-            <div class="header-overlay">
+            <div class="header-overlay" id="headerOverlayMobile">
                 <h1>BlockStats Explorer</h1>
-                <p>Bitcoin statistics with client-side analytics</p>
+                <p>Interactive visualization of per-block Bitcoin statistics with client-side analytics</p>
+                <div class="loading-status" id="loadingStatusMobile">Loading WASM module...</div>
             </div>
 
             <div class="controls-overlay">
@@ -46,9 +47,10 @@
         </div>
 
         <!-- Desktop header (hidden on mobile) -->
-        <header>
+        <header id="headerDesktop">
             <h1>BlockStats Explorer</h1>
             <p>Interactive visualization of per-block Bitcoin statistics with client-side analytics</p>
+            <div class="loading-status" id="loadingStatusDesktop">Loading WASM module...</div>
         </header>
 
         <!-- Desktop controls (hidden on mobile) -->
@@ -75,15 +77,8 @@
             </div>
         </div>
 
-        <!-- Mobile status overlay -->
-        <div class="status-overlay">
-            <span id="loadingStatusMobile">Loading WASM module...</span>
-            <span id="dataStatusMobile"></span>
-        </div>
-
         <!-- Desktop status (hidden on mobile) -->
         <div class="status">
-            <span id="loadingStatusDesktop">Loading WASM module...</span>
             <span id="dataStatusDesktop"></span>
         </div>
 
