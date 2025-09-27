@@ -374,11 +374,6 @@ button:not(.primary) {
 
 /* Hide desktop elements on mobile */
 @media (max-width: 767px) {
-    /* Force red background on body to test if CSS is loading */
-    body {
-        background-color: red !important;
-    }
-
     header,
     .controls,
     .status,
