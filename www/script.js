@@ -5,6 +5,7 @@ class BitcoinFeeExplorer {
         this.wasmModule = null;
         this.explorer = null;
         this.metadata = null;
+        this.arrowData = new Map();
         this.selectedMetrics = new Set();
         this.chart = null;
     }
@@ -12,10 +13,16 @@ class BitcoinFeeExplorer {
     async initialize() {
         try {
             this.updateStatus('Loading WASM module...');
+            console.log('Starting WASM initialization...');
 
             // Initialize WASM
+            console.log('Calling init()...');
             await init();
+            console.log('WASM init() completed successfully');
+
+            console.log('Creating FeeExplorer instance...');
             this.explorer = new FeeExplorer();
+            console.log('FeeExplorer created successfully');
 
             this.updateStatus('Loading metadata...');
             await this.loadMetadata();
@@ -162,8 +169,11 @@ class BitcoinFeeExplorer {
         }
 
         // Now load the updated metadata into WASM
+        console.log('Loading metadata into WASM...');
         const updatedMetadata = JSON.stringify(this.metadata);
+        console.log('Metadata to load:', updatedMetadata);
         await this.explorer.load_metadata(updatedMetadata);
+        console.log('Metadata loaded into WASM successfully');
 
         this.updateDataStatus(`Loaded ${this.arrowData.size} Arrow datasets successfully`);
     }
@@ -175,30 +185,76 @@ class BitcoinFeeExplorer {
     }
 
     populateMetricSelect() {
-        const select = document.getElementById('metricSelect');
-        select.innerHTML = '';
+        console.log('Populating metric select...');
+        const selectMobile = document.getElementById('metricSelectMobile');
+        const selectDesktop = document.getElementById('metricSelectDesktop');
 
-        // Get available metrics from WASM module
-        const metrics = this.explorer.get_available_metrics();
+        if (selectMobile) selectMobile.innerHTML = '';
+        if (selectDesktop) selectDesktop.innerHTML = '';
 
-        metrics.forEach(metric => {
-            const option = document.createElement('option');
-            option.value = metric.name;
-            option.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
-            option.dataset.unit = metric.unit;
-            option.dataset.dataset = metric.dataset;
-            select.appendChild(option);
-        });
+        try {
+            // Get available metrics from WASM module
+            console.log('Calling get_available_metrics()...');
+            const metrics = this.explorer.get_available_metrics();
+            console.log('Got metrics from WASM:', metrics);
+            console.log('Number of metrics:', metrics ? metrics.length : 'null/undefined');
+
+            if (!metrics || metrics.length === 0) {
+                console.warn('No metrics returned from WASM module');
+                if (selectMobile) selectMobile.innerHTML = '<option>No metrics available</option>';
+                if (selectDesktop) selectDesktop.innerHTML = '<option>No metrics available</option>';
+                return;
+            }
+
+            metrics.forEach((metric, index) => {
+                console.log(`Processing metric ${index}:`, metric);
+
+                // Create option for mobile
+                if (selectMobile) {
+                    const optionMobile = document.createElement('option');
+                    optionMobile.value = metric.name;
+                    optionMobile.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
+                    optionMobile.dataset.unit = metric.unit;
+                    optionMobile.dataset.dataset = metric.dataset;
+                    selectMobile.appendChild(optionMobile);
+                }
+
+                // Create option for desktop
+                if (selectDesktop) {
+                    const optionDesktop = document.createElement('option');
+                    optionDesktop.value = metric.name;
+                    optionDesktop.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
+                    optionDesktop.dataset.unit = metric.unit;
+                    optionDesktop.dataset.dataset = metric.dataset;
+                    selectDesktop.appendChild(optionDesktop);
+                }
+            });
+
+            console.log('Metric select populated successfully');
+        } catch (error) {
+            console.error('Error populating metrics:', error);
+            if (selectMobile) selectMobile.innerHTML = '<option>Error loading metrics</option>';
+            if (selectDesktop) selectDesktop.innerHTML = '<option>Error loading metrics</option>';
+        }
     }
 
     setupEventListeners() {
-        const metricSelect = document.getElementById('metricSelect');
-        const updateButton = document.getElementById('updateChart');
-        const resetZoomButton = document.getElementById('resetZoom');
-        const logScaleCheckbox = document.getElementById('logScale');
-        const showMACheckbox = document.getElementById('showMA');
+        const metricSelectMobile = document.getElementById('metricSelectMobile');
+        const metricSelectDesktop = document.getElementById('metricSelectDesktop');
+        const updateButtonMobile = document.getElementById('updateChartMobile');
+        const updateButtonDesktop = document.getElementById('updateChartDesktop');
+        const resetZoomButtonMobile = document.getElementById('resetZoomMobile');
+        const resetZoomButtonDesktop = document.getElementById('resetZoomDesktop');
+        const logScaleCheckboxMobile = document.getElementById('logScaleMobile');
+        const logScaleCheckboxDesktop = document.getElementById('logScaleDesktop');
+        const showMACheckboxMobile = document.getElementById('showMAMobile');
+        const showMACheckboxDesktop = document.getElementById('showMADesktop');
 
-        metricSelect.addEventListener('change', (e) => {
+        // Mobile collapsible sections
+        this.setupMobileControls();
+
+        // Handle metric selection for both mobile and desktop
+        const handleMetricChange = (e) => {
             this.selectedMetrics.clear();
             Array.from(e.target.selectedOptions).forEach(option => {
                 this.selectedMetrics.add({
@@ -207,23 +263,64 @@ class BitcoinFeeExplorer {
                     dataset: option.dataset.dataset
                 });
             });
-        });
+        };
 
-        updateButton.addEventListener('click', () => this.updateChart());
-        resetZoomButton.addEventListener('click', () => this.resetZoom());
+        if (metricSelectMobile) {
+            metricSelectMobile.addEventListener('change', handleMetricChange);
+        }
+        if (metricSelectDesktop) {
+            metricSelectDesktop.addEventListener('change', handleMetricChange);
+        }
 
-        logScaleCheckbox.addEventListener('change', () => this.updateChartLayout());
-        showMACheckbox.addEventListener('change', () => this.updateChart());
+        if (updateButtonMobile) {
+            updateButtonMobile.addEventListener('click', () => this.updateChart());
+        }
+        if (updateButtonDesktop) {
+            updateButtonDesktop.addEventListener('click', () => this.updateChart());
+        }
+        if (resetZoomButtonMobile) {
+            resetZoomButtonMobile.addEventListener('click', () => this.resetZoom());
+        }
+        if (resetZoomButtonDesktop) {
+            resetZoomButtonDesktop.addEventListener('click', () => this.resetZoom());
+        }
 
-        // Enable multi-select with Ctrl/Cmd
-        metricSelect.addEventListener('mousedown', (e) => {
+        if (logScaleCheckboxMobile) {
+            logScaleCheckboxMobile.addEventListener('change', () => this.updateChartLayout());
+        }
+        if (logScaleCheckboxDesktop) {
+            logScaleCheckboxDesktop.addEventListener('change', () => this.updateChartLayout());
+        }
+        if (showMACheckboxMobile) {
+            showMACheckboxMobile.addEventListener('change', () => this.updateChart());
+        }
+        if (showMACheckboxDesktop) {
+            showMACheckboxDesktop.addEventListener('change', () => this.updateChart());
+        }
+
+        // Enable multi-select with Ctrl/Cmd for both mobile and desktop
+        const handleMultiSelect = (e) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 const option = e.target;
                 if (option.tagName === 'OPTION') {
                     option.selected = !option.selected;
-                    metricSelect.dispatchEvent(new Event('change'));
+                    e.currentTarget.dispatchEvent(new Event('change'));
                 }
+            }
+        };
+
+        if (metricSelectMobile) {
+            metricSelectMobile.addEventListener('mousedown', handleMultiSelect);
+        }
+        if (metricSelectDesktop) {
+            metricSelectDesktop.addEventListener('mousedown', handleMultiSelect);
+        }
+
+        // Handle window resize for responsive chart height
+        window.addEventListener('resize', () => {
+            if (this.chart && this.chart.data && this.chart.data.length > 0) {
+                this.updateChartLayout();
             }
         });
     }
@@ -231,9 +328,13 @@ class BitcoinFeeExplorer {
     initializeChart() {
         const chartDiv = document.getElementById('mainChart');
 
+        // Responsive height: full screen on mobile, fixed on desktop
+        const isMobile = window.innerWidth <= 767;
+        const chartHeight = isMobile ? window.innerHeight : 600;
+
         const layout = {
-            title: 'BlockStats Explorer',
-            height: 600,
+            title: isMobile ? null : 'BlockStats Explorer', // Hide title on mobile for more space
+            height: chartHeight,
             xaxis: {
                 title: 'Block Height',
                 type: 'linear'
@@ -280,8 +381,15 @@ class BitcoinFeeExplorer {
         try {
             const startHeight = this.metadata.block_range.start;
             const endHeight = this.metadata.block_range.end;
-            const showMA = document.getElementById('showMA').checked;
-            const maWindow = parseInt(document.getElementById('maWindow').value) || 200;
+
+            // Check both mobile and desktop checkboxes
+            const showMAMobile = document.getElementById('showMAMobile');
+            const showMADesktop = document.getElementById('showMADesktop');
+            const showMA = (showMAMobile && showMAMobile.checked) || (showMADesktop && showMADesktop.checked);
+
+            const maWindowMobile = document.getElementById('maWindowMobile');
+            const maWindowDesktop = document.getElementById('maWindowDesktop');
+            const maWindow = parseInt((maWindowMobile && maWindowMobile.value) || (maWindowDesktop && maWindowDesktop.value)) || 200;
 
             const traces = [];
             const metricNames = Array.from(this.selectedMetrics).map(m => m.name);
@@ -459,11 +567,17 @@ class BitcoinFeeExplorer {
     }
 
     getChartLayout() {
-        const logScale = document.getElementById('logScale').checked;
+        const logScaleMobile = document.getElementById('logScaleMobile');
+        const logScaleDesktop = document.getElementById('logScaleDesktop');
+        const logScale = (logScaleMobile && logScaleMobile.checked) || (logScaleDesktop && logScaleDesktop.checked);
+
+        // Responsive height: full screen on mobile, fixed on desktop
+        const isMobile = window.innerWidth <= 767;
+        const chartHeight = isMobile ? window.innerHeight : 600;
 
         return {
-            title: 'BlockStats Explorer',
-            height: 600,
+            title: isMobile ? null : 'BlockStats Explorer', // Hide title on mobile for more space
+            height: chartHeight,
             xaxis: {
                 title: 'Block Height',
                 type: 'linear',
@@ -510,11 +624,17 @@ class BitcoinFeeExplorer {
     }
 
     updateStatus(message) {
-        document.getElementById('loadingStatus').textContent = message;
+        const loadingStatusMobile = document.getElementById('loadingStatusMobile');
+        const loadingStatusDesktop = document.getElementById('loadingStatusDesktop');
+        if (loadingStatusMobile) loadingStatusMobile.textContent = message;
+        if (loadingStatusDesktop) loadingStatusDesktop.textContent = message;
     }
 
     updateDataStatus(message) {
-        document.getElementById('dataStatus').textContent = message;
+        const dataStatusMobile = document.getElementById('dataStatusMobile');
+        const dataStatusDesktop = document.getElementById('dataStatusDesktop');
+        if (dataStatusMobile) dataStatusMobile.textContent = message;
+        if (dataStatusDesktop) dataStatusDesktop.textContent = message;
     }
 
     updateDataRangeDisplay(maxHeight) {
@@ -548,6 +668,25 @@ class BitcoinFeeExplorer {
         }
 
         document.getElementById('dataRange').textContent = message;
+    }
+
+    setupMobileControls() {
+        // Handle collapsible control sections
+        const controlHeaders = document.querySelectorAll('.control-header');
+        controlHeaders.forEach(header => {
+            header.addEventListener('click', () => {
+                const section = header.parentElement;
+                section.classList.toggle('collapsed');
+            });
+        });
+
+        // Auto-collapse sections after initial load
+        setTimeout(() => {
+            const sections = document.querySelectorAll('.control-section');
+            sections.forEach(section => {
+                section.classList.add('collapsed');
+            });
+        }, 2000);
     }
 }
 

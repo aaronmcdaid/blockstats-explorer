@@ -10,15 +10,52 @@
 </head>
 <body>
     <div class="container">
+        <!-- Mobile overlay controls -->
+        <div class="mobile-overlay">
+            <div class="header-overlay">
+                <h1>BlockStats Explorer</h1>
+                <p>Bitcoin statistics with client-side analytics</p>
+            </div>
+
+            <div class="controls-overlay">
+                <div class="control-section">
+                    <div class="control-header">Select Metrics</div>
+                    <div class="control-content">
+                        <select id="metricSelectMobile" multiple size="6">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <div class="control-header">Chart Options</div>
+                    <div class="control-content">
+                        <div class="chart-options">
+                            <label><input type="checkbox" id="logScaleMobile"> Log Scale</label>
+                            <label><input type="checkbox" id="showMAMobile"> Moving Average</label>
+                            <input type="number" id="maWindowMobile" value="200" min="1" max="1000" placeholder="MA Window">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button id="updateChartMobile" class="primary">Update Chart</button>
+                    <button id="resetZoomMobile">Reset Zoom</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desktop header (hidden on mobile) -->
         <header>
             <h1>BlockStats Explorer</h1>
             <p>Interactive visualization of per-block Bitcoin statistics with client-side analytics</p>
         </header>
 
+        <!-- Desktop controls (hidden on mobile) -->
         <div class="controls">
             <div class="control-group">
-                <label for="metricSelect">Select Metrics:</label>
-                <select id="metricSelect" multiple size="8">
+                <label for="metricSelectDesktop">Select Metrics:</label>
+                <select id="metricSelectDesktop" multiple size="8">
                     <!-- Populated dynamically -->
                 </select>
             </div>
@@ -26,21 +63,28 @@
             <div class="control-group">
                 <label>Chart Options:</label>
                 <div class="chart-options">
-                    <label><input type="checkbox" id="logScale"> Log Scale</label>
-                    <label><input type="checkbox" id="showMA"> Moving Average</label>
-                    <input type="number" id="maWindow" value="200" min="1" max="1000" placeholder="MA Window">
+                    <label><input type="checkbox" id="logScaleDesktop"> Log Scale</label>
+                    <label><input type="checkbox" id="showMADesktop"> Moving Average</label>
+                    <input type="number" id="maWindowDesktop" value="200" min="1" max="1000" placeholder="MA Window">
                 </div>
             </div>
 
             <div class="control-group">
-                <button id="updateChart" class="primary">Update Chart</button>
-                <button id="resetZoom">Reset Zoom</button>
+                <button id="updateChartDesktop" class="primary">Update Chart</button>
+                <button id="resetZoomDesktop">Reset Zoom</button>
             </div>
         </div>
 
+        <!-- Mobile status overlay -->
+        <div class="status-overlay">
+            <span id="loadingStatusMobile">Loading WASM module...</span>
+            <span id="dataStatusMobile"></span>
+        </div>
+
+        <!-- Desktop status (hidden on mobile) -->
         <div class="status">
-            <span id="loadingStatus">Loading WASM module...</span>
-            <span id="dataStatus"></span>
+            <span id="loadingStatusDesktop">Loading WASM module...</span>
+            <span id="dataStatusDesktop"></span>
         </div>
 
         <div class="chart-container">
