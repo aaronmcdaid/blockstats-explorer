@@ -265,7 +265,41 @@ class BitcoinFeeExplorer {
                     headerDesktop.style.display = 'none';
                 }, 600);
             }
+
+            // Show tutorial after headers are hidden
+            setTimeout(() => {
+                this.showTutorial();
+            }, 700); // Show tutorial after header animation completes
         }, 1000); // 1 second pause before animation starts
+    }
+
+    showTutorial() {
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        if (tutorialOverlay) {
+            tutorialOverlay.style.display = 'flex';
+
+            // Setup click-to-dismiss handlers
+            const dismissButton = document.getElementById('tutorialDismiss');
+            if (dismissButton) {
+                dismissButton.addEventListener('click', () => this.hideTutorial());
+            }
+
+            // Click anywhere on overlay to dismiss
+            tutorialOverlay.addEventListener('click', () => this.hideTutorial());
+
+            // Prevent clicks on tutorial content from dismissing
+            const tutorialContent = tutorialOverlay.querySelector('.tutorial-content');
+            if (tutorialContent) {
+                tutorialContent.addEventListener('click', (e) => e.stopPropagation());
+            }
+        }
+    }
+
+    hideTutorial() {
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        if (tutorialOverlay) {
+            tutorialOverlay.style.display = 'none';
+        }
     }
 
     populateMetricSelect() {

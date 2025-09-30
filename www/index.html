@@ -106,6 +106,43 @@
         </footer>
     </div>
 
+    <!-- Simple tutorial overlay - shows after data loading -->
+    <div class="tutorial-overlay" id="tutorialOverlay" style="display: none;">
+        <div class="tutorial-content">
+            <h2>📊 How to Explore Bitcoin Data</h2>
+
+            <div class="tutorial-section">
+                <div class="tutorial-item">
+                    <div class="tutorial-icon">🔍</div>
+                    <div class="tutorial-text">
+                        <h3>Zoom In</h3>
+                        <p>Draw a box around any area to zoom in</p>
+                    </div>
+                </div>
+
+                <div class="tutorial-item">
+                    <div class="tutorial-icon">👆</div>
+                    <div class="tutorial-text">
+                        <h3>Pan Around</h3>
+                        <p>Drag on the chart axes to move around</p>
+                    </div>
+                </div>
+
+                <div class="tutorial-item">
+                    <div class="tutorial-icon">↩️</div>
+                    <div class="tutorial-text">
+                        <h3>Reset View</h3>
+                        <p>Double-click anywhere to zoom out fully</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tutorial-footer">
+                <p class="dismiss-hint">💡 Click anywhere to dismiss</p>
+                <button class="tutorial-dismiss" id="tutorialDismiss">Got it! 🚀</button>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="script.js"></script>
 </body>
