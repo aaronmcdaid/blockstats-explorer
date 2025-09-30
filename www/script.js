@@ -626,10 +626,21 @@ class BitcoinFeeExplorer {
 
     calculateMovingAverage(values, window) {
         const ma = [];
-        for (let i = window - 1; i < values.length; i++) {
-            const sum = values.slice(i - window + 1, i + 1).reduce((a, b) => a + b, 0);
+        if (values.length < window) return ma;
+
+        // Calculate initial sum for first window
+        let sum = 0;
+        for (let i = 0; i < window; i++) {
+            sum += values[i];
+        }
+        ma.push(sum / window);
+
+        // Use sliding window: remove first element, add next element
+        for (let i = window; i < values.length; i++) {
+            sum = sum - values[i - window] + values[i];
             ma.push(sum / window);
         }
+
         return ma;
     }
 
