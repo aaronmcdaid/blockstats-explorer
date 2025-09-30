@@ -693,6 +693,7 @@ class BitcoinFeeExplorer {
                 bordercolor: 'rgba(0,0,0,0.2)',
                 borderwidth: 1
             },
+            showlegend: true,
             hovermode: 'x unified',
             dragmode: 'zoom'
         };
