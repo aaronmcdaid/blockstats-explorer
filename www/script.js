@@ -327,20 +327,22 @@ class BitcoinFeeExplorer {
                 // Create option for mobile
                 if (selectMobile) {
                     const optionMobile = document.createElement('option');
-                    optionMobile.value = metric.name;
+                    optionMobile.value = `${metric.dataset}::${metric.name}`;
                     optionMobile.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
                     optionMobile.dataset.unit = metric.unit;
                     optionMobile.dataset.dataset = metric.dataset;
+                    optionMobile.dataset.metricName = metric.name;
                     selectMobile.appendChild(optionMobile);
                 }
 
                 // Create option for desktop
                 if (selectDesktop) {
                     const optionDesktop = document.createElement('option');
-                    optionDesktop.value = metric.name;
+                    optionDesktop.value = `${metric.dataset}::${metric.name}`;
                     optionDesktop.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
                     optionDesktop.dataset.unit = metric.unit;
                     optionDesktop.dataset.dataset = metric.dataset;
+                    optionDesktop.dataset.metricName = metric.name;
                     selectDesktop.appendChild(optionDesktop);
                 }
             });
@@ -373,7 +375,8 @@ class BitcoinFeeExplorer {
             this.selectedMetrics.clear();
             Array.from(e.target.selectedOptions).forEach(option => {
                 this.selectedMetrics.add({
-                    name: option.value,
+                    uniqueId: option.value, // e.g., "Complete Analysis::tx_count"
+                    name: option.dataset.metricName, // e.g., "tx_count"
                     unit: option.dataset.unit,
                     dataset: option.dataset.dataset
                 });
@@ -514,10 +517,10 @@ class BitcoinFeeExplorer {
             const maWindow = parseInt((maWindowMobile && maWindowMobile.value) || (maWindowDesktop && maWindowDesktop.value)) || 200;
 
             const traces = [];
-            const metricNames = Array.from(this.selectedMetrics).map(m => m.name);
+            const selectedMetrics = Array.from(this.selectedMetrics);
 
             // Get metric data from Arrow files
-            this.createArrowTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow);
+            this.createArrowTraces(traces, selectedMetrics, startHeight, endHeight, showMA, maWindow);
 
             await Plotly.react(this.chart, traces, this.getChartLayout());
             this.updateStatus('Chart updated successfully');
@@ -528,9 +531,24 @@ class BitcoinFeeExplorer {
         }
     }
 
-    createArrowTraces(traces, metricNames, startHeight, endHeight, showMA, maWindow) {
-        // Get data from Arrow files
-        for (const [datasetName, {table, dataset}] of this.arrowData) {
+    createArrowTraces(traces, selectedMetrics, startHeight, endHeight, showMA, maWindow) {
+        // Process each selected metric with its specific dataset
+        for (const metric of selectedMetrics) {
+            // Find the specific dataset for this metric
+            const datasetEntry = this.arrowData.get(metric.dataset);
+            if (!datasetEntry) {
+                console.warn(`Dataset '${metric.dataset}' not found for metric '${metric.name}'`);
+                continue;
+            }
+
+            const {table, dataset} = datasetEntry;
+
+            // Check if this metric exists in this dataset
+            if (!table.schema.fields.find(f => f.name === metric.name)) {
+                console.warn(`Metric '${metric.name}' not found in dataset '${metric.dataset}'`);
+                continue;
+            }
+
             // Get height column
             const heightColumn = table.getChild('height');
             const heights = heightColumn.toArray();
@@ -544,51 +562,46 @@ class BitcoinFeeExplorer {
                 }
             }
 
-            // Process each requested metric
-            for (const metricName of metricNames) {
-                if (table.schema.fields.find(f => f.name === metricName)) {
-                    const metric = Array.from(this.selectedMetrics).find(m => m.name === metricName);
-                    const column = table.getChild(metricName);
+            // Get the metric column
+            const column = table.getChild(metric.name);
 
-                    // Extract filtered data
-                    const filteredHeights = indices.map(i => heights[i]);
-                    const filteredValues = indices.map(i => column.get(i));
+            // Extract filtered data
+            const filteredHeights = indices.map(i => heights[i]);
+            const filteredValues = indices.map(i => column.get(i));
 
-                    // Create trace
-                    const yaxis = this.assignYAxis(metric.unit);
-                    const trace = {
-                        x: filteredHeights,
-                        y: filteredValues,
-                        name: `${metricName} (${metric.unit})`,
-                        type: 'scatter',
-                        mode: 'lines',
-                        yaxis: yaxis,
-                        line: {
-                            width: 1.5
-                        }
-                    };
-
-                    traces.push(trace);
-
-                    // Add moving average if requested
-                    if (showMA && filteredHeights.length > maWindow) {
-                        const maData = this.calculateMovingAverage(filteredValues, maWindow);
-                        const maTrace = {
-                            x: filteredHeights.slice(maWindow - 1),
-                            y: maData,
-                            name: `${metricName} MA(${maWindow})`,
-                            type: 'scatter',
-                            mode: 'lines',
-                            yaxis: yaxis,
-                            line: {
-                                width: 2,
-                                dash: 'dash'
-                            },
-                            opacity: 0.8
-                        };
-                        traces.push(maTrace);
-                    }
+            // Create trace
+            const yaxis = this.assignYAxis(metric.unit);
+            const trace = {
+                x: filteredHeights,
+                y: filteredValues,
+                name: `${metric.name} (${metric.unit})`,
+                type: 'scatter',
+                mode: 'lines',
+                yaxis: yaxis,
+                line: {
+                    width: 1.5
                 }
+            };
+
+            traces.push(trace);
+
+            // Add moving average if requested
+            if (showMA && filteredHeights.length > maWindow) {
+                const maData = this.calculateMovingAverage(filteredValues, maWindow);
+                const maTrace = {
+                    x: filteredHeights.slice(maWindow - 1),
+                    y: maData,
+                    name: `${metric.name} MA(${maWindow})`,
+                    type: 'scatter',
+                    mode: 'lines',
+                    yaxis: yaxis,
+                    line: {
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    opacity: 0.8
+                };
+                traces.push(maTrace);
             }
         }
     }
