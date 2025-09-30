@@ -802,10 +802,13 @@ class BitcoinFeeExplorer {
                 `${metric.name} (${metric.maWindow}-block MA)` :
                 metric.name;
 
-            metricItem.innerHTML = `
-                ${metricText}
-                <button class="current-metric-remove" onclick="app.removeMetric('${this.currentModalAxis}', ${index})">×</button>
-            `;
+            const removeButton = document.createElement('button');
+            removeButton.className = 'current-metric-remove';
+            removeButton.textContent = '×';
+            removeButton.addEventListener('click', () => this.removeMetric(this.currentModalAxis, index));
+
+            metricItem.innerHTML = metricText;
+            metricItem.appendChild(removeButton);
 
             currentMetricsList.appendChild(metricItem);
         });
