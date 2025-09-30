@@ -11,7 +11,9 @@
       "columns": {
         "height": {"type": "index", "description": "Block height"},
         "timestamp": {"type": "index", "description": "Block timestamp (Unix seconds)"},
-        "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
+        "op_return_count": {"type": "metric", "unit": "count", "description": "Number of OP_RETURN outputs"},
+        "op_return_size": {"type": "metric", "unit": "bytes", "description": "Size of all OP_RETURN outputs"},
+        "tx_count": {"type": "metric", "unit": "count", "description": "Number of transactions"},
         "fee_avg": {"type": "metric", "unit": "sat/vB", "description": "Average fee rate"},
         "block_size": {"type": "metric", "unit": "bytes", "description": "Block size in bytes"},
         "tx_size_0": {"type": "metric", "unit": "vbytes", "description": "Minimum transaction size"},

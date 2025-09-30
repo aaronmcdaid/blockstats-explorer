@@ -576,6 +576,54 @@ fn get_column_extractor(column_name: &str) -> anyhow::Result<ColumnExtractor> {
             let utxo_set = utxo.expect("utxo_size requires UTXO data - this should have been caught by validation");
             utxo_set.len() as f64
         }),
+        "op_return_count" => Ok(|block, _height, _utxo| {
+            // Count total number of OP_RETURN outputs across all transactions in the block
+            let mut op_return_count = 0;
+            for tx in &block.txdata {
+                for output in &tx.output {
+                    if output.script_pubkey.is_op_return() {
+                        op_return_count += 1;
+                    }
+                }
+            }
+            op_return_count as f64
+        }),
+        "op_return_bytes" => Ok(|block, _height, _utxo| {
+            // Sum total bytes in all OP_RETURN outputs across all transactions in the block
+            let mut total_op_return_bytes = 0;
+            for tx in &block.txdata {
+                for output in &tx.output {
+                    if output.script_pubkey.is_op_return() {
+                        total_op_return_bytes += output.script_pubkey.len();
+                    }
+                }
+            }
+            total_op_return_bytes as f64
+        }),
+        "op_return_gt40" => Ok(|block, _height, _utxo| {
+            // Count OP_RETURN outputs larger than 40 bytes
+            let mut count_gt40 = 0;
+            for tx in &block.txdata {
+                for output in &tx.output {
+                    if output.script_pubkey.is_op_return() && output.script_pubkey.len() > 40 {
+                        count_gt40 += 1;
+                    }
+                }
+            }
+            count_gt40 as f64
+        }),
+        "op_return_gt80" => Ok(|block, _height, _utxo| {
+            // Count OP_RETURN outputs larger than 80 bytes
+            let mut count_gt80 = 0;
+            for tx in &block.txdata {
+                for output in &tx.output {
+                    if output.script_pubkey.is_op_return() && output.script_pubkey.len() > 80 {
+                        count_gt80 += 1;
+                    }
+                }
+            }
+            count_gt80 as f64
+        }),
         _ => Err(anyhow::anyhow!("Unknown column: {}", column_name)),
     }
 }

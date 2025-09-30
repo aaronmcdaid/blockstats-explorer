@@ -16,11 +16,12 @@ A comprehensive Bitcoin blockchain analysis tool with two integrated components:
 - **No Database Dependencies**: Avoids complex LevelDB integration
 
 ### Web Frontend Features
-- **Mobile-First Design**: Full-screen chart experience with floating overlay controls
+- **Clean Metric Selection**: +/- buttons with modal-based metric management
+- **Unit-Based Axis Assignment**: Left/right axes automatically group compatible metrics by unit
 - **Progressive Loading**: Real-time download progress for large Arrow files
 - **Responsive Analytics**: WASM-powered calculations including moving averages
 - **Multi-Dataset Support**: Visualize different aspects of blockchain data
-- **Interactive Charts**: Plotly.js with advanced zoom, pan, and multi-axis support
+- **Interactive Charts**: Plotly.js with advanced zoom, pan, and reset functionality
 
 ## Current Status
 
