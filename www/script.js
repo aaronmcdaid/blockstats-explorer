@@ -274,11 +274,12 @@ class BitcoinFeeExplorer {
             }
 
             if (headerDesktop) {
-                headerDesktop.classList.add('slide-up');
-                // Remove from DOM after animation completes
-                setTimeout(() => {
-                    headerDesktop.style.display = 'none';
-                }, 600);
+                // Keep desktop header visible, just hide loading elements
+                const loadingStatus = headerDesktop.querySelector('.loading-status');
+                const progressContainer = headerDesktop.querySelector('.progress-container');
+
+                if (loadingStatus) loadingStatus.style.display = 'none';
+                if (progressContainer) progressContainer.style.display = 'none';
             }
 
             // Show tutorial after headers are hidden
@@ -414,7 +415,7 @@ class BitcoinFeeExplorer {
         const chartHeight = isMobile ? window.innerHeight : 600;
 
         const layout = {
-            title: isMobile ? null : 'BlockStats Explorer', // Hide title on mobile for more space
+            title: '',
             height: chartHeight,
             xaxis: {
                 title: 'Block Height',
@@ -667,8 +668,13 @@ class BitcoinFeeExplorer {
             `Right Axis (${this.rightAxisMetrics[0].unit})` : 'Right Axis';
 
         return {
-            title: isMobile ? null : 'BlockStats Explorer', // Hide title on mobile for more space
             height: chartHeight,
+            margin: {
+                t: 50,  // Reduced top margin to minimize gap
+                r: 50,
+                b: 50,
+                l: 50
+            },
             xaxis: {
                 title: 'Block Height',
                 type: 'linear',
