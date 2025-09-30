@@ -198,6 +198,17 @@ class BitcoinFeeExplorer {
                     throw heightError;
                 }
 
+                // Validate that all columns in datasets.json actually exist in the Arrow file
+                const actualColumns = new Set(table.schema.fields.map(field => field.name));
+                const expectedColumns = Object.keys(dataset.columns);
+                const missingColumns = expectedColumns.filter(col => !actualColumns.has(col));
+
+                if (missingColumns.length > 0) {
+                    const error = `Dataset validation failed for ${dataset.file}. Missing columns: ${missingColumns.join(', ')}. Available columns: ${Array.from(actualColumns).join(', ')}`;
+                    console.error(error);
+                    throw new Error(error);
+                }
+
                 this.arrowData.set(dataset.name, {
                     table: table,
                     dataset: dataset
