@@ -242,6 +242,8 @@ class BitcoinFeeExplorer {
 
         // Hide loading headers after UI is fully set up with animation
         this.hideLoadingHeaders();
+
+        // Keep tutorial overlay visible until user dismisses it manually
     }
 
     hideLoadingHeaders() {
@@ -463,13 +465,150 @@ class BitcoinFeeExplorer {
         Plotly.newPlot(chartDiv, [], layout, config);
         this.chart = chartDiv;
 
-        // Remove debugging for now and try a simpler approach
-        if (isMobile) {
-            console.log('Mobile chart initialized with config:', config);
+        // Setup tutorial overlay dismiss handler
+        this.setupTutorial();
+    }
 
-            // Maybe the issue is with Plotly.js touch handling
-            // Let's try disabling all custom touch handling and let Plotly handle it
-            console.log('Mobile chart ready for touch interactions');
+    setupTutorial() {
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        const tutorialContent = document.querySelector('.tutorial-content');
+        const dismissButton = document.getElementById('tutorialDismiss');
+
+        if (dismissButton) {
+            dismissButton.addEventListener('click', () => {
+                this.hideTutorial();
+            });
+        }
+
+        // Also allow clicking outside the tutorial content to dismiss
+        if (tutorialOverlay) {
+            tutorialOverlay.addEventListener('click', (e) => {
+                if (e.target === tutorialOverlay) {
+                    this.hideTutorial();
+                }
+            });
+        }
+
+        // Add swipe-to-dismiss functionality
+        if (tutorialContent) {
+            this.setupSwipeToDismiss(tutorialContent);
+        }
+    }
+
+    setupSwipeToDismiss(element) {
+        let startY = 0;
+        let currentY = 0;
+        let isDragging = false;
+        let startTime = 0;
+
+        const handleTouchStart = (e) => {
+            startY = e.touches[0].clientY;
+            currentY = startY;
+            isDragging = true;
+            startTime = Date.now();
+            element.style.transition = 'none';
+        };
+
+        const handleTouchMove = (e) => {
+            if (!isDragging) return;
+
+            currentY = e.touches[0].clientY;
+            const deltaY = currentY - startY;
+
+            // Only allow upward swipes (negative deltaY)
+            if (deltaY < 0) {
+                element.style.transform = `translateY(${deltaY}px)`;
+                element.style.opacity = Math.max(0.3, 1 + deltaY / 200);
+            }
+        };
+
+        const handleTouchEnd = (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const deltaY = currentY - startY;
+            const deltaTime = Date.now() - startTime;
+            const velocity = Math.abs(deltaY) / deltaTime;
+
+            // Dismiss if swiped up significantly or with high velocity
+            const shouldDismiss = deltaY < -100 || (deltaY < -50 && velocity > 0.5);
+
+            element.style.transition = 'all 0.3s ease';
+
+            if (shouldDismiss) {
+                // Animate out
+                element.style.transform = 'translateY(-100%)';
+                element.style.opacity = '0';
+                setTimeout(() => {
+                    this.hideTutorial();
+                }, 300);
+            } else {
+                // Snap back
+                element.style.transform = 'translateY(0)';
+                element.style.opacity = '1';
+            }
+        };
+
+        // Add touch event listeners
+        element.addEventListener('touchstart', handleTouchStart, { passive: true });
+        element.addEventListener('touchmove', handleTouchMove, { passive: false });
+        element.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+        // Also add mouse events for desktop testing
+        element.addEventListener('mousedown', (e) => {
+            startY = e.clientY;
+            currentY = startY;
+            isDragging = true;
+            startTime = Date.now();
+            element.style.transition = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            currentY = e.clientY;
+            const deltaY = currentY - startY;
+
+            if (deltaY < 0) {
+                element.style.transform = `translateY(${deltaY}px)`;
+                element.style.opacity = Math.max(0.3, 1 + deltaY / 200);
+            }
+        });
+
+        document.addEventListener('mouseup', (e) => {
+            if (!isDragging) return;
+            isDragging = false;
+
+            const deltaY = currentY - startY;
+            const deltaTime = Date.now() - startTime;
+            const velocity = Math.abs(deltaY) / deltaTime;
+
+            const shouldDismiss = deltaY < -100 || (deltaY < -50 && velocity > 0.5);
+
+            element.style.transition = 'all 0.3s ease';
+
+            if (shouldDismiss) {
+                element.style.transform = 'translateY(-100%)';
+                element.style.opacity = '0';
+                setTimeout(() => {
+                    this.hideTutorial();
+                }, 300);
+            } else {
+                element.style.transform = 'translateY(0)';
+                element.style.opacity = '1';
+            }
+        });
+    }
+
+    hideTutorial() {
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        if (tutorialOverlay) {
+            tutorialOverlay.style.opacity = '0';
+            tutorialOverlay.style.pointerEvents = 'none';
+            setTimeout(() => {
+                tutorialOverlay.style.display = 'none';
+            }, 300);
         }
     }
 
