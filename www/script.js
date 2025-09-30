@@ -405,6 +405,7 @@ class BitcoinFeeExplorer {
                 this.updateChartLayout();
             }
         });
+
     }
 
     initializeChart() {
@@ -811,6 +812,7 @@ class BitcoinFeeExplorer {
         modal.style.display = 'none';
         this.currentModalAxis = null;
     }
+
 
     populateModal() {
         this.populateCurrentMetrics();
