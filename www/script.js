@@ -6,8 +6,12 @@ class BitcoinFeeExplorer {
         this.explorer = null;
         this.metadata = null;
         this.arrowData = new Map();
-        this.selectedMetrics = new Set();
+        this.leftAxisMetrics = []; // Array of metric objects for left axis
+        this.rightAxisMetrics = []; // Array of metric objects for right axis
         this.chart = null;
+        this.currentModalAxis = null; // 'left' or 'right'
+        this.nextColorIndex = 0; // For assigning colors to new metrics
+        this.colorPalette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
     }
 
     async initialize() {
@@ -356,83 +360,31 @@ class BitcoinFeeExplorer {
     }
 
     setupEventListeners() {
-        const metricSelectMobile = document.getElementById('metricSelectMobile');
-        const metricSelectDesktop = document.getElementById('metricSelectDesktop');
-        const updateButtonMobile = document.getElementById('updateChartMobile');
-        const updateButtonDesktop = document.getElementById('updateChartDesktop');
-        const resetZoomButtonMobile = document.getElementById('resetZoomMobile');
-        const resetZoomButtonDesktop = document.getElementById('resetZoomDesktop');
-        const logScaleCheckboxMobile = document.getElementById('logScaleMobile');
-        const logScaleCheckboxDesktop = document.getElementById('logScaleDesktop');
-        const showMACheckboxMobile = document.getElementById('showMAMobile');
-        const showMACheckboxDesktop = document.getElementById('showMADesktop');
+        // Axis management buttons
+        const leftAxisButton = document.getElementById('leftAxisButton');
+        const rightAxisButton = document.getElementById('rightAxisButton');
 
-        // Mobile collapsible sections
-        this.setupMobileControls();
-
-        // Handle metric selection for both mobile and desktop
-        const handleMetricChange = (e) => {
-            this.selectedMetrics.clear();
-            Array.from(e.target.selectedOptions).forEach(option => {
-                this.selectedMetrics.add({
-                    uniqueId: option.value, // e.g., "Complete Analysis::tx_count"
-                    name: option.dataset.metricName, // e.g., "tx_count"
-                    unit: option.dataset.unit,
-                    dataset: option.dataset.dataset
-                });
-            });
-        };
-
-        if (metricSelectMobile) {
-            metricSelectMobile.addEventListener('change', handleMetricChange);
+        if (leftAxisButton) {
+            leftAxisButton.addEventListener('click', () => this.openMetricModal('left'));
         }
-        if (metricSelectDesktop) {
-            metricSelectDesktop.addEventListener('change', handleMetricChange);
+        if (rightAxisButton) {
+            rightAxisButton.addEventListener('click', () => this.openMetricModal('right'));
         }
 
-        if (updateButtonMobile) {
-            updateButtonMobile.addEventListener('click', () => this.updateChart());
-        }
-        if (updateButtonDesktop) {
-            updateButtonDesktop.addEventListener('click', () => this.updateChart());
-        }
-        if (resetZoomButtonMobile) {
-            resetZoomButtonMobile.addEventListener('click', () => this.resetZoom());
-        }
-        if (resetZoomButtonDesktop) {
-            resetZoomButtonDesktop.addEventListener('click', () => this.resetZoom());
+        // Modal event listeners
+        const modalClose = document.getElementById('modalClose');
+        const metricModal = document.getElementById('metricModal');
+
+        if (modalClose) {
+            modalClose.addEventListener('click', () => this.closeMetricModal());
         }
 
-        if (logScaleCheckboxMobile) {
-            logScaleCheckboxMobile.addEventListener('change', () => this.updateChartLayout());
-        }
-        if (logScaleCheckboxDesktop) {
-            logScaleCheckboxDesktop.addEventListener('change', () => this.updateChartLayout());
-        }
-        if (showMACheckboxMobile) {
-            showMACheckboxMobile.addEventListener('change', () => this.updateChart());
-        }
-        if (showMACheckboxDesktop) {
-            showMACheckboxDesktop.addEventListener('change', () => this.updateChart());
-        }
-
-        // Enable multi-select with Ctrl/Cmd for both mobile and desktop
-        const handleMultiSelect = (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                const option = e.target;
-                if (option.tagName === 'OPTION') {
-                    option.selected = !option.selected;
-                    e.currentTarget.dispatchEvent(new Event('change'));
+        if (metricModal) {
+            metricModal.addEventListener('click', (e) => {
+                if (e.target === metricModal) {
+                    this.closeMetricModal();
                 }
-            }
-        };
-
-        if (metricSelectMobile) {
-            metricSelectMobile.addEventListener('mousedown', handleMultiSelect);
-        }
-        if (metricSelectDesktop) {
-            metricSelectDesktop.addEventListener('mousedown', handleMultiSelect);
+            });
         }
 
         // Handle window resize for responsive chart height
@@ -496,31 +448,18 @@ class BitcoinFeeExplorer {
     }
 
     async updateChart() {
-        if (this.selectedMetrics.size === 0) {
-            alert('Please select at least one metric');
-            return;
-        }
-
         this.updateStatus('Updating chart...');
 
         try {
             const startHeight = this.metadata.block_range.start;
             const endHeight = this.metadata.block_range.end;
-
-            // Check both mobile and desktop checkboxes
-            const showMAMobile = document.getElementById('showMAMobile');
-            const showMADesktop = document.getElementById('showMADesktop');
-            const showMA = (showMAMobile && showMAMobile.checked) || (showMADesktop && showMADesktop.checked);
-
-            const maWindowMobile = document.getElementById('maWindowMobile');
-            const maWindowDesktop = document.getElementById('maWindowDesktop');
-            const maWindow = parseInt((maWindowMobile && maWindowMobile.value) || (maWindowDesktop && maWindowDesktop.value)) || 200;
-
             const traces = [];
-            const selectedMetrics = Array.from(this.selectedMetrics);
 
-            // Get metric data from Arrow files
-            this.createArrowTraces(traces, selectedMetrics, startHeight, endHeight, showMA, maWindow);
+            // Create traces for left axis metrics
+            this.createAxisTraces(traces, this.leftAxisMetrics, 'y', startHeight, endHeight);
+
+            // Create traces for right axis metrics
+            this.createAxisTraces(traces, this.rightAxisMetrics, 'y2', startHeight, endHeight);
 
             await Plotly.react(this.chart, traces, this.getChartLayout());
             this.updateStatus('Chart updated successfully');
@@ -531,9 +470,8 @@ class BitcoinFeeExplorer {
         }
     }
 
-    createArrowTraces(traces, selectedMetrics, startHeight, endHeight, showMA, maWindow) {
-        // Process each selected metric with its specific dataset
-        for (const metric of selectedMetrics) {
+    createAxisTraces(traces, axisMetrics, yaxis, startHeight, endHeight) {
+        for (const metric of axisMetrics) {
             // Find the specific dataset for this metric
             const datasetEntry = this.arrowData.get(metric.dataset);
             if (!datasetEntry) {
@@ -569,40 +507,34 @@ class BitcoinFeeExplorer {
             const filteredHeights = indices.map(i => heights[i]);
             const filteredValues = indices.map(i => column.get(i));
 
-            // Create trace
-            const yaxis = this.assignYAxis(metric.unit);
+            // Create main trace
+            const traceName = metric.maWindow ?
+                `${metric.name} (${metric.maWindow}-block MA)` :
+                metric.name;
+
+            let finalValues = filteredValues;
+            let finalHeights = filteredHeights;
+
+            // Apply moving average if specified
+            if (metric.maWindow && filteredValues.length > metric.maWindow) {
+                finalValues = this.calculateMovingAverage(filteredValues, metric.maWindow);
+                finalHeights = filteredHeights.slice(metric.maWindow - 1);
+            }
+
             const trace = {
-                x: filteredHeights,
-                y: filteredValues,
-                name: `${metric.name} (${metric.unit})`,
+                x: finalHeights,
+                y: finalValues,
+                name: traceName,
                 type: 'scatter',
                 mode: 'lines',
                 yaxis: yaxis,
                 line: {
-                    width: 1.5
+                    width: 1.5,
+                    color: metric.color
                 }
             };
 
             traces.push(trace);
-
-            // Add moving average if requested
-            if (showMA && filteredHeights.length > maWindow) {
-                const maData = this.calculateMovingAverage(filteredValues, maWindow);
-                const maTrace = {
-                    x: filteredHeights.slice(maWindow - 1),
-                    y: maData,
-                    name: `${metric.name} MA(${maWindow})`,
-                    type: 'scatter',
-                    mode: 'lines',
-                    yaxis: yaxis,
-                    line: {
-                        width: 2,
-                        dash: 'dash'
-                    },
-                    opacity: 0.8
-                };
-                traces.push(maTrace);
-            }
         }
     }
 
@@ -702,13 +634,15 @@ class BitcoinFeeExplorer {
     }
 
     getChartLayout() {
-        const logScaleMobile = document.getElementById('logScaleMobile');
-        const logScaleDesktop = document.getElementById('logScaleDesktop');
-        const logScale = (logScaleMobile && logScaleMobile.checked) || (logScaleDesktop && logScaleDesktop.checked);
-
         // Responsive height: full screen on mobile, fixed on desktop
         const isMobile = window.innerWidth <= 767;
         const chartHeight = isMobile ? window.innerHeight : 600;
+
+        // Generate axis titles based on current metrics
+        const leftAxisTitle = this.leftAxisMetrics.length > 0 ?
+            `Left Axis (${this.leftAxisMetrics[0].unit})` : 'Left Axis';
+        const rightAxisTitle = this.rightAxisMetrics.length > 0 ?
+            `Right Axis (${this.rightAxisMetrics[0].unit})` : 'Right Axis';
 
         return {
             title: isMobile ? null : 'BlockStats Explorer', // Hide title on mobile for more space
@@ -719,16 +653,16 @@ class BitcoinFeeExplorer {
                 showgrid: true
             },
             yaxis: {
-                title: 'Left Axis',
+                title: leftAxisTitle,
                 side: 'left',
-                type: logScale ? 'log' : 'linear',
+                type: 'linear',
                 showgrid: true
             },
             yaxis2: {
-                title: 'Right Axis',
+                title: rightAxisTitle,
                 side: 'right',
                 overlaying: 'y',
-                type: logScale ? 'log' : 'linear'
+                type: 'linear'
             },
             legend: {
                 x: 0.02,
@@ -738,7 +672,7 @@ class BitcoinFeeExplorer {
                 borderwidth: 1
             },
             hovermode: 'x unified',
-            dragmode: 'zoom' // Try zoom mode for both mobile and desktop
+            dragmode: 'zoom'
         };
     }
 
@@ -824,23 +758,122 @@ class BitcoinFeeExplorer {
         document.getElementById('dataRange').textContent = message;
     }
 
-    setupMobileControls() {
-        // Handle collapsible control sections
-        const controlHeaders = document.querySelectorAll('.control-header');
-        controlHeaders.forEach(header => {
-            header.addEventListener('click', () => {
-                const section = header.parentElement;
-                section.classList.toggle('collapsed');
-            });
-        });
+    // Modal management methods
+    openMetricModal(axis) {
+        this.currentModalAxis = axis;
+        const modal = document.getElementById('metricModal');
+        const modalTitle = document.getElementById('modalTitle');
 
-        // Auto-collapse sections after initial load
-        setTimeout(() => {
-            const sections = document.querySelectorAll('.control-section');
-            sections.forEach(section => {
-                section.classList.add('collapsed');
-            });
-        }, 2000);
+        modalTitle.textContent = `Manage ${axis.charAt(0).toUpperCase() + axis.slice(1)} Axis`;
+        modal.style.display = 'flex';
+
+        this.populateModal();
+    }
+
+    closeMetricModal() {
+        const modal = document.getElementById('metricModal');
+        modal.style.display = 'none';
+        this.currentModalAxis = null;
+    }
+
+    populateModal() {
+        this.populateCurrentMetrics();
+        this.populateAvailableMetrics();
+    }
+
+    populateCurrentMetrics() {
+        const currentMetricsList = document.getElementById('currentMetricsList');
+        const metrics = this.currentModalAxis === 'left' ? this.leftAxisMetrics : this.rightAxisMetrics;
+
+        currentMetricsList.innerHTML = '';
+
+        if (metrics.length === 0) {
+            currentMetricsList.innerHTML = '<div style="color: #999; font-style: italic; padding: 20px;">No metrics selected</div>';
+            return;
+        }
+
+        metrics.forEach((metric, index) => {
+            const metricItem = document.createElement('div');
+            metricItem.className = 'current-metric-item';
+            metricItem.style.borderColor = metric.color;
+            metricItem.style.color = metric.color;
+
+            const metricText = metric.maWindow ?
+                `${metric.name} (${metric.maWindow}-block MA)` :
+                metric.name;
+
+            metricItem.innerHTML = `
+                ${metricText}
+                <button class="current-metric-remove" onclick="app.removeMetric('${this.currentModalAxis}', ${index})">×</button>
+            `;
+
+            currentMetricsList.appendChild(metricItem);
+        });
+    }
+
+    populateAvailableMetrics() {
+        const availableMetricsList = document.getElementById('availableMetricsList');
+        const currentMetrics = this.currentModalAxis === 'left' ? this.leftAxisMetrics : this.rightAxisMetrics;
+
+        availableMetricsList.innerHTML = '';
+
+        // Get the current unit for this axis (if any metrics exist)
+        const currentUnit = currentMetrics.length > 0 ? currentMetrics[0].unit : null;
+
+        // Get all available metrics from WASM
+        const allMetrics = this.explorer.get_available_metrics();
+
+        allMetrics.forEach(metric => {
+            const isCompatible = !currentUnit || metric.unit === currentUnit;
+
+            const metricItem = document.createElement('div');
+            metricItem.className = `available-metric-item ${isCompatible ? '' : 'disabled'}`;
+            metricItem.textContent = `${metric.name} (${metric.unit}) - ${metric.description}`;
+
+            if (isCompatible) {
+                metricItem.addEventListener('click', () => this.addMetric(metric));
+            }
+
+            availableMetricsList.appendChild(metricItem);
+        });
+    }
+
+    addMetric(metricInfo) {
+        const maDropdown = document.getElementById('maDropdown');
+        const maWindow = maDropdown.value !== 'none' ? parseInt(maDropdown.value) : null;
+
+        const newMetric = {
+            uniqueId: `${metricInfo.dataset}::${metricInfo.name}`,
+            name: metricInfo.name,
+            unit: metricInfo.unit,
+            dataset: metricInfo.dataset,
+            maWindow: maWindow,
+            color: this.colorPalette[this.nextColorIndex % this.colorPalette.length]
+        };
+
+        this.nextColorIndex++;
+
+        if (this.currentModalAxis === 'left') {
+            this.leftAxisMetrics.push(newMetric);
+        } else {
+            this.rightAxisMetrics.push(newMetric);
+        }
+
+        // Close modal and update chart
+        this.closeMetricModal();
+        this.updateChart();
+    }
+
+    removeMetric(axis, index) {
+        if (axis === 'left') {
+            this.leftAxisMetrics.splice(index, 1);
+        } else {
+            this.rightAxisMetrics.splice(index, 1);
+        }
+
+        // Close modal and update chart
+        this.closeMetricModal();
+        this.updateChart();
     }
 }
 
