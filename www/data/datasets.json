@@ -27,7 +27,6 @@
       "columns": {
         "height": {"type": "index", "description": "Block height"},
         "timestamp": {"type": "index", "description": "Block timestamp (Unix seconds)"},
-        "tx_count": {"type": "metric", "unit": "transactions", "description": "Number of transactions"},
         "utxo_size": {"type": "metric", "unit": "UTXOs", "description": "Number of unspent transaction outputs"},
         "fee_rates_0": {"type": "metric", "unit": "sat/vB", "description": "Minimum fee rate"},
         "fee_rates_25": {"type": "metric", "unit": "sat/vB", "description": "25th percentile fee rate"},
