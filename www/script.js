@@ -763,8 +763,15 @@ class BitcoinFeeExplorer {
         this.currentModalAxis = axis;
         const modal = document.getElementById('metricModal');
         const modalTitle = document.getElementById('modalTitle');
+        const maDropdown = document.getElementById('maDropdown');
 
         modalTitle.textContent = `Manage ${axis.charAt(0).toUpperCase() + axis.slice(1)} Axis`;
+
+        // Reset MA dropdown to "None"
+        if (maDropdown) {
+            maDropdown.value = 'none';
+        }
+
         modal.style.display = 'flex';
 
         this.populateModal();
@@ -823,10 +830,11 @@ class BitcoinFeeExplorer {
         // Get the current unit for this axis (if any metrics exist)
         const currentUnit = currentMetrics.length > 0 ? currentMetrics[0].unit : null;
 
-        // Get all available metrics from WASM
+        // Get all available metrics from WASM and sort them alphabetically
         const allMetrics = this.explorer.get_available_metrics();
+        const sortedMetrics = allMetrics.sort((a, b) => a.name.localeCompare(b.name));
 
-        allMetrics.forEach(metric => {
+        sortedMetrics.forEach(metric => {
             const isCompatible = !currentUnit || metric.unit === currentUnit;
 
             const metricItem = document.createElement('div');
