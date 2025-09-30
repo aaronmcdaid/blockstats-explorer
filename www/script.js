@@ -278,19 +278,13 @@ class BitcoinFeeExplorer {
         if (tutorialOverlay) {
             tutorialOverlay.style.display = 'flex';
 
-            // Setup click-to-dismiss handlers
+            // Click anywhere to dismiss
+            tutorialOverlay.addEventListener('click', () => this.hideTutorial());
+
+            // Also set up button click handler (redundant but explicit)
             const dismissButton = document.getElementById('tutorialDismiss');
             if (dismissButton) {
                 dismissButton.addEventListener('click', () => this.hideTutorial());
-            }
-
-            // Click anywhere on overlay to dismiss
-            tutorialOverlay.addEventListener('click', () => this.hideTutorial());
-
-            // Prevent clicks on tutorial content from dismissing
-            const tutorialContent = tutorialOverlay.querySelector('.tutorial-content');
-            if (tutorialContent) {
-                tutorialContent.addEventListener('click', (e) => e.stopPropagation());
             }
         }
     }
