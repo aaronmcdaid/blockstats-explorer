@@ -290,7 +290,10 @@ class BitcoinFeeExplorer {
                 return;
             }
 
-            metrics.forEach((metric, index) => {
+            // Sort metrics alphabetically by name
+            const sortedMetrics = [...metrics].sort((a, b) => a.name.localeCompare(b.name));
+
+            sortedMetrics.forEach((metric, index) => {
                 console.log(`Processing metric ${index}:`, metric);
 
                 // Create option for mobile
@@ -439,10 +442,17 @@ class BitcoinFeeExplorer {
                 bgcolor: 'rgba(255,255,255,0.8)'
             },
             hovermode: 'x unified',
-            dragmode: 'zoom'
+            dragmode: 'zoom' // Try zoom mode for both mobile and desktop
         };
 
-        const config = {
+        const config = isMobile ? {
+            // Clean mobile configuration
+            responsive: true,
+            displayModeBar: false,  // Hide mode bar for clean mobile interface
+            scrollZoom: true,
+            doubleClick: 'reset+autosize'
+        } : {
+            // Desktop configuration
             responsive: true,
             displayModeBar: true,
             modeBarButtonsToAdd: ['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d'],
@@ -452,6 +462,15 @@ class BitcoinFeeExplorer {
 
         Plotly.newPlot(chartDiv, [], layout, config);
         this.chart = chartDiv;
+
+        // Remove debugging for now and try a simpler approach
+        if (isMobile) {
+            console.log('Mobile chart initialized with config:', config);
+
+            // Maybe the issue is with Plotly.js touch handling
+            // Let's try disabling all custom touch handling and let Plotly handle it
+            console.log('Mobile chart ready for touch interactions');
+        }
     }
 
     async updateChart() {
@@ -687,7 +706,7 @@ class BitcoinFeeExplorer {
                 borderwidth: 1
             },
             hovermode: 'x unified',
-            dragmode: 'zoom'
+            dragmode: 'zoom' // Try zoom mode for both mobile and desktop
         };
     }
 
