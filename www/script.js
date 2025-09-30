@@ -449,7 +449,7 @@ class BitcoinFeeExplorer {
             // Desktop configuration
             responsive: true,
             displayModeBar: true,
-            modeBarButtonsToAdd: ['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d'],
+            modeBarButtonsToRemove: ['zoom2d', 'pan2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d'],
             scrollZoom: true,
             doubleClick: 'reset+autosize'
         };
